@@ -29,6 +29,9 @@ namespace Confluent.SchemaRegistry.Encryption
                 case DekFormat.AES128_GCM:
                     // Generate 128-bit key
                     return 16;
+                case DekFormat.AES256_GCM:
+                    // Generate 256-bit key
+                    return 32;
                 default:
                     throw new ArgumentException();
             }
@@ -47,6 +50,7 @@ namespace Confluent.SchemaRegistry.Encryption
                 case DekFormat.AES256_SIV:
                     return EncryptWithAesSiv(key, plaintext);
                 case DekFormat.AES128_GCM:
+                case DekFormat.AES256_GCM:
                     return EncryptWithAesGcm(key, plaintext);
                 default:
                     throw new ArgumentException();
@@ -60,6 +64,7 @@ namespace Confluent.SchemaRegistry.Encryption
                 case DekFormat.AES256_SIV:
                     return DecryptWithAesSiv(key, ciphertext);
                 case DekFormat.AES128_GCM:
+                case DekFormat.AES256_GCM:
                     return DecryptWithAesGcm(key, ciphertext);
                 default:
                     throw new ArgumentException();
@@ -137,6 +142,7 @@ namespace Confluent.SchemaRegistry.Encryption
     public enum DekFormat
     {
         AES256_SIV,
-        AES128_GCM
+        AES128_GCM,
+        AES256_GCM
     }
 }

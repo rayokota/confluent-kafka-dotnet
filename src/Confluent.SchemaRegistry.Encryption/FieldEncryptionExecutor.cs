@@ -49,8 +49,7 @@ namespace Confluent.SchemaRegistry.Encryption
         private static DekFormat GetKeyFormat(bool isDeterministic)
         {
             // TODO RULES fix gcm in tests
-            //return isDeterministic ? DekFormat.AES256_SIV : DekFormat.AES128_GCM;
-            return isDeterministic ? DekFormat.AES256_SIV : DekFormat.AES256_SIV;
+            return isDeterministic ? DekFormat.AES256_SIV : DekFormat.AES256_GCM;
         }
 
         protected override FieldTransform newTransform(RuleContext ctx)

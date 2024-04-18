@@ -17,8 +17,7 @@ namespace Confluent.SchemaRegistry.Encryption
         {
             Secret = secret;
             // TODO RULES fix gcm in tests
-            //cryptor = new Cryptor(DekFormat.AES256_SIV);
-            cryptor = new Cryptor(DekFormat.AES128_GCM);
+            cryptor = new Cryptor(DekFormat.AES256_GCM);
             key = Hkdf.DeriveKey(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(secret), cryptor.KeySize());
         }
         
