@@ -32,5 +32,9 @@ namespace Confluent.SchemaRegistry
         {
             return FieldTransformer.Invoke(ctx, newTransform(ctx), message);
         }
+
+        public void Dispose()
+        {
+        }
     }
 }

@@ -40,13 +40,17 @@ namespace Confluent.SchemaRegistry
         public RuleMode RuleMode { get; set; }
 
         public Rule Rule { get; set; }
+        
+        public int Index { get; set; }
+        
+        public IList<Rule> Rules { get; set;}
 
         public IDictionary<object, object> CustomData { get; } = new Dictionary<object, object>();
 
         private Stack<FieldContext> fieldContexts = new Stack<FieldContext>();
 
         public RuleContext(Schema source, Schema target, string subject, string topic,
-            Headers headers, bool isKey, RuleMode ruleMode, Rule rule)
+            Headers headers, bool isKey, RuleMode ruleMode, Rule rule, int index, IList<Rule> rules)
         {
             Source = source;
             Target = target;
@@ -56,24 +60,33 @@ namespace Confluent.SchemaRegistry
             IsKey = isKey;
             RuleMode = ruleMode;
             Rule = rule;
+            Index = index;
+            Rules = rules;
         }
 
-        internal ISet<string> getTags(string fullName)
+        public ISet<string> GetTags(string fullName)
         {
             ISet<string> tags = new HashSet<string>();
-            Metadata metadata = Target.Metadata;
-            if (metadata != null && metadata.Tags != null)
+            foreach (var entry in Target.Metadata?.Tags)
             {
-                foreach (var entry in metadata.Tags)
+                if (WildcardMatcher.Match(fullName, entry.Key))
                 {
-                    if (WildcardMatcher.Match(fullName, entry.Key))
-                    {
-                        tags.UnionWith(entry.Value);
-                    } 
-                }
+                    tags.UnionWith(entry.Value);
+                } 
             }
-
             return tags;
+        }
+        
+        
+        public string GetParameter(string key)
+        {
+            string value = null;
+            Rule.Params?.TryGetValue(key, out value);
+            if (value == null)
+            {
+                Target.Metadata?.Properties?.TryGetValue(key, out value);
+            }
+            return value;
         }
 
 
@@ -86,7 +99,7 @@ namespace Confluent.SchemaRegistry
             string fullName, string name, Type type, ISet<string> tags)
         {
             ISet<string> allTags = new HashSet<string>(tags);
-            allTags.UnionWith(getTags(fullName));
+            allTags.UnionWith(GetTags(fullName));
             return new FieldContext(this, containingMessage, fullName, name, type, allTags);
         }
 

@@ -56,8 +56,9 @@ namespace Confluent.SchemaRegistry
                 return message;
             }
 
-            foreach (Rule rule in rules)
+            for (int i = 0; i < rules.Count; i++)
             {
+                Rule rule = rules[i];
                 if (rule.Mode == RuleMode.ReadWrite)
                 {
                     if (ruleMode != RuleMode.Read && ruleMode != RuleMode.Write)
@@ -78,7 +79,7 @@ namespace Confluent.SchemaRegistry
                 }
 
                 RuleContext ctx = new RuleContext(source, target,
-                    subject, topic, headers, isKey, ruleMode, rule);
+                    subject, topic, headers, isKey, ruleMode, rule, i, rules);
                 if (!ruleExecutors.TryGetValue(rule.Type.ToUpper(), out IRuleExecutor ruleExecutor)) 
                 {
                     return message;

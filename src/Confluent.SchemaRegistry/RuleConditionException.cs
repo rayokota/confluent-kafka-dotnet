@@ -1,4 +1,4 @@
-// Copyright 2022 Confluent Inc.
+// Copyright 2024 Confluent Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,19 +14,37 @@
 //
 // Refer to LICENSE for more information.
 
+using System;
+
 namespace Confluent.SchemaRegistry
 {
     /// <summary>
-    ///     A rule executor   
+    ///     A rule condition exception
     /// </summary>
-    public interface IRuleExecutor : IRuleBase
+    public class RuleConditionException : RuleException
     {
         /// <summary>
-        ///     Transform the message based on the rule context 
+        ///    Constructor 
         /// </summary>
-        /// <param name="ctx"></param>
+        public RuleConditionException()
+        {
+        }
+
+        /// <summary>
+        ///     Constructor
+        /// </summary>
         /// <param name="message"></param>
-        /// <returns></returns>
-        object Transform(RuleContext ctx, object message);
+        public RuleConditionException(string message) : base(message)
+        {
+        }
+
+        /// <summary>
+        ///     Constructor
+        /// </summary>
+        /// <param name="message"></param>
+        /// <param name="inner"></param>
+        public RuleConditionException(string message, Exception inner) : base(message, inner)
+        {
+        }
     }
 }

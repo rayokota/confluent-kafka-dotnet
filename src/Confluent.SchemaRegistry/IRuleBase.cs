@@ -1,4 +1,4 @@
-// Copyright 2022 Confluent Inc.
+// Copyright 2024 Confluent Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,19 +14,19 @@
 //
 // Refer to LICENSE for more information.
 
+using System;
+
 namespace Confluent.SchemaRegistry
 {
     /// <summary>
-    ///     A rule executor   
+    ///     A base class for rule executors and actions
     /// </summary>
-    public interface IRuleExecutor : IRuleBase
+    public interface IRuleBase : IDisposable
     {
         /// <summary>
-        ///     Transform the message based on the rule context 
+        ///     The type of rule executor or action
         /// </summary>
-        /// <param name="ctx"></param>
-        /// <param name="message"></param>
         /// <returns></returns>
-        object Transform(RuleContext ctx, object message);
+        string Type();
     }
 }
