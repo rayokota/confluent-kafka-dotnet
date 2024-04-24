@@ -16,6 +16,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.Serialization;
 using Confluent.Kafka;
 
@@ -27,8 +28,25 @@ namespace Confluent.SchemaRegistry
     /// </summary>
     public static class SerdeUtils
     {
+        /// <summary>
+        ///     Execute rules 
+        /// </summary>
+        /// <param name="ruleExecutors"></param>
+        /// <param name="ruleActions"></param>
+        /// <param name="isKey"></param>
+        /// <param name="subject"></param>
+        /// <param name="topic"></param>
+        /// <param name="headers"></param>
+        /// <param name="ruleMode"></param>
+        /// <param name="source"></param>
+        /// <param name="target"></param>
+        /// <param name="message"></param>
+        /// <returns></returns>
+        /// <exception cref="RuleConditionException"></exception>
+        /// <exception cref="ArgumentException"></exception>
         public static object ExecuteRules(
-            IDictionary<string, IRuleExecutor> ruleExecutors, bool isKey,
+            IDictionary<string, IRuleExecutor> ruleExecutors, 
+            IDictionary<string, IRuleAction> ruleActions, bool isKey,
             string subject, string topic, Headers headers,
             RuleMode ruleMode, Schema source, Schema target, object message)
         {
@@ -44,11 +62,17 @@ namespace Confluent.SchemaRegistry
             }
             else if (ruleMode == RuleMode.Downgrade)
             {
-                rules = source.RuleSet?.MigrationRules;
+                // Execute downgrade rules in reverse order for symmetry
+                rules = source.RuleSet?.MigrationRules.Reverse().ToList();
             }
             else
             {
                 rules = target.RuleSet?.DomainRules;
+                if (rules != null && ruleMode == RuleMode.Read)
+                {
+                    // Execute read rules in reverse order for symmetry
+                    rules = rules.Reverse().ToList();
+                }
             }
 
             if (rules == null)
@@ -59,7 +83,11 @@ namespace Confluent.SchemaRegistry
             for (int i = 0; i < rules.Count; i++)
             {
                 Rule rule = rules[i];
-                if (rule.Mode == RuleMode.ReadWrite)
+                if (rule.Disabled)
+                {
+                    continue;
+                }
+                if (rule.Mode == RuleMode.WriteRead)
                 {
                     if (ruleMode != RuleMode.Read && ruleMode != RuleMode.Write)
                     {
@@ -80,19 +108,104 @@ namespace Confluent.SchemaRegistry
 
                 RuleContext ctx = new RuleContext(source, target,
                     subject, topic, headers, isKey, ruleMode, rule, i, rules);
-                if (!ruleExecutors.TryGetValue(rule.Type.ToUpper(), out IRuleExecutor ruleExecutor)) 
+                if (ruleExecutors.TryGetValue(rule.Type.ToUpper(), out IRuleExecutor ruleExecutor))
                 {
-                    return message;
-                }
+                    try
+                    {
+                        object result = ruleExecutor.Transform(ctx, message);
+                        switch (rule.Kind)
+                        {
+                            case RuleKind.Condition:
+                                if (result is bool condition && !condition)
+                                {
+                                    throw new RuleConditionException(rule);
+                                }
 
-                message = ruleExecutor.Transform(ctx, message);
-                if (message == null)
+                                break;
+                            case RuleKind.Transform:
+                                message = result;
+                                break;
+                            default:
+                                throw new ArgumentException("Unsupported rule kind " + rule.Kind);
+                        }
+                        RunAction(ruleActions, ctx, ruleMode, rule, message != null ? rule.OnSuccess : rule.OnFailure,
+                            message, null, message != null ? null : ErrorAction.ActionType);
+                    }
+                    catch (RuleException ex)
+                    {
+                        RunAction(ruleActions, ctx, ruleMode, rule, rule.OnFailure, message, 
+                            ex, ErrorAction.ActionType);
+                    }
+                }
+                else
                 {
-                    throw new SerializationException("Validation failed for rule " + rule);
+                    RunAction(ruleActions, ctx, ruleMode, rule, rule.OnFailure, message, 
+                        new RuleException("Could not find rule executor of type " + rule.Type), ErrorAction.ActionType);
                 }
             }
-
             return message;
+        }
+
+        private static void RunAction(IDictionary<string, IRuleAction> ruleActions, RuleContext ctx, RuleMode ruleMode, 
+            Rule rule, string action, object message, RuleException ex, string defaultAction)
+        {
+            string actionName = GetRuleActionName(rule, ruleMode, action);
+            if (actionName == null)
+            {
+                actionName = defaultAction;
+            }
+            if (actionName != null)
+            {
+                IRuleAction ruleAction = GetRuleAction(ruleActions, actionName);
+                if (ruleAction == null)
+                {
+                    throw new SerializationException("Could not find rule action of type " + actionName);
+                }
+
+                try
+                {
+                    ruleAction.Run(ctx, message, ex);
+                } catch (RuleException e)
+                {
+                    throw new SerializationException("Failed to run rule action " + actionName, e);
+                }
+            }
+        }
+
+        private static string GetRuleActionName(Rule rule, RuleMode ruleMode, string actionName)
+        {
+            if ((rule.Mode == RuleMode.WriteRead || rule.Mode == RuleMode.UpDown)
+                && actionName != null
+                && actionName.Contains(","))
+            {
+                String[] parts = actionName.Split(',');
+                switch (ruleMode)
+                {
+                    case RuleMode.Write:
+                    case RuleMode.Upgrade:
+                        return parts[0];
+                    case RuleMode.Read:
+                    case RuleMode.Downgrade:
+                        return parts[1];
+                    default:
+                        throw new ArgumentException("Unsupported rule mode " + ruleMode);
+                }
+            }
+            return actionName;
+        }
+
+        private static IRuleAction GetRuleAction(IDictionary<string, IRuleAction> ruleActions, string actionName)
+        {
+            if (actionName == ErrorAction.ActionType)
+            {
+                return new ErrorAction();
+            }
+            if (actionName == NoneAction.ActionType)
+            {
+                return new NoneAction();
+            }
+            ruleActions.TryGetValue(actionName.ToUpper(), out IRuleAction action);
+            return action;
         }
     }
 }

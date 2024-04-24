@@ -33,18 +33,23 @@ namespace Confluent.SchemaRegistry
         /// <summary>
         ///     Constructor
         /// </summary>
-        /// <param name="message"></param>
-        public RuleConditionException(string message) : base(message)
+        /// <param name="rule"></param>
+        public RuleConditionException(Rule rule) : base(getErrorMessage(rule))
         {
         }
-
-        /// <summary>
-        ///     Constructor
-        /// </summary>
-        /// <param name="message"></param>
-        /// <param name="inner"></param>
-        public RuleConditionException(string message, Exception inner) : base(message, inner)
+        
+        private static string getErrorMessage(Rule rule)
         {
+            string errMsg = rule.Doc;
+            if (string.IsNullOrEmpty(errMsg))
+            {
+                string expr = rule.Expr;
+                errMsg = expr != null 
+                    ? $"Expr failed: '{expr}'"
+                    : $"Condition failed: '{rule.Name}'";
+            }
+
+            return errMsg;
         }
     }
 }

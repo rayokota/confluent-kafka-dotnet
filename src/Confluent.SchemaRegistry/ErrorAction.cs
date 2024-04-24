@@ -21,9 +21,11 @@ namespace Confluent.SchemaRegistry
     /// </summary>
     public class ErrorAction : IRuleAction
     {
+        public static readonly string ActionType = "ERROR";
+        
         public string Type()
         {
-            return "ERROR";
+            return ActionType;
         }
         
         public void Run(RuleContext ctx, object message, RuleException exception = null)

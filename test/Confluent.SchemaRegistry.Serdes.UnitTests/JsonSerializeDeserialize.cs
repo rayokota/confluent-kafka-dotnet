@@ -284,7 +284,7 @@ namespace Confluent.SchemaRegistry.Serdes.UnitTests
             schema.RuleSet = new RuleSet(new List<Rule>(),
                 new List<Rule> 
                 {
-                    new Rule("encryptPII", RuleKind.Transform, RuleMode.ReadWrite, "ENCRYPT", new HashSet<string>
+                    new Rule("encryptPII", RuleKind.Transform, RuleMode.WriteRead, "ENCRYPT", new HashSet<string>
                     {
                         "PII"
                     })

@@ -65,6 +65,7 @@ namespace Confluent.SchemaRegistry.Serdes
         private ISchemaRegistryClient schemaRegistryClient;
         private readonly JsonSchemaGeneratorSettings jsonSchemaGeneratorSettings;
         private IDictionary<string, IRuleExecutor> ruleExecutors = new Dictionary<string, IRuleExecutor>();
+        private IDictionary<string, IRuleAction> ruleActions = new Dictionary<string, IRuleAction>();
         
         private HashSet<string> subjectsRegistered = new HashSet<string>();
         private SemaphoreSlim serializeMutex = new SemaphoreSlim(1);
@@ -218,7 +219,7 @@ namespace Confluent.SchemaRegistry.Serdes
                 
                 if (latestSchema != null)
                 {
-                    value = (T)SerdeUtils.ExecuteRules(ruleExecutors, context.Component == MessageComponentType.Key, subject, context.Topic, context.Headers, RuleMode.Write, null,
+                    value = (T)SerdeUtils.ExecuteRules(ruleExecutors, ruleActions, context.Component == MessageComponentType.Key, subject, context.Topic, context.Headers, RuleMode.Write, null,
                         latestSchema, value);
                 }
 

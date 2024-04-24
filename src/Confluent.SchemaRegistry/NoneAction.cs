@@ -21,9 +21,11 @@ namespace Confluent.SchemaRegistry
     /// </summary>
     public class NoneAction : IRuleAction
     {
+        public static readonly string ActionType = "ERROR";
+        
         public string Type()
         {
-            return "NONE";
+            return ActionType;
         }
         
         public void Run(RuleContext ctx, object message, RuleException exception = null)

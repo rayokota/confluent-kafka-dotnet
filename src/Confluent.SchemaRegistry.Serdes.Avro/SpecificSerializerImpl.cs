@@ -93,7 +93,8 @@ namespace Confluent.SchemaRegistry.Serdes
         private SerializerSchemaData singleSchemaData = null;
 
         private SemaphoreSlim serializeMutex = new SemaphoreSlim(1);
-        private IDictionary<string, IRuleExecutor> ruleExecutors;
+        private IDictionary<string, IRuleExecutor> ruleExecutors = new Dictionary<string, IRuleExecutor>();
+        private IDictionary<string, IRuleAction> ruleActions = new Dictionary<string, IRuleAction>();
 
         public SpecificSerializerImpl(
             ISchemaRegistryClient schemaRegistryClient,
@@ -245,7 +246,7 @@ namespace Confluent.SchemaRegistry.Serdes
 
                 if (latestSchema != null)
                 {
-                    data = (T)SerdeUtils.ExecuteRules(ruleExecutors, isKey, subject, topic, headers, RuleMode.Write, null,
+                    data = (T)SerdeUtils.ExecuteRules(ruleExecutors, ruleActions, isKey, subject, topic, headers, RuleMode.Write, null,
                         latestSchema, data);
                 }
 

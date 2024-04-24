@@ -54,6 +54,7 @@ namespace Confluent.SchemaRegistry.Serdes
 
         private ISchemaRegistryClient schemaRegistryClient;
         private IDictionary<string, IRuleExecutor> ruleExecutors = new Dictionary<string, IRuleExecutor>();
+        private IDictionary<string, IRuleAction> ruleActions = new Dictionary<string, IRuleAction>();
         
         private bool useDeprecatedFormat = false;
         
@@ -201,7 +202,7 @@ namespace Confluent.SchemaRegistry.Serdes
                     
                     if (writerSchema != null)
                     {
-                        message = (T) SerdeUtils.ExecuteRules(ruleExecutors, context.Component == MessageComponentType.Key, null, context.Topic, context.Headers, RuleMode.Read, null,
+                        message = (T) SerdeUtils.ExecuteRules(ruleExecutors, ruleActions, context.Component == MessageComponentType.Key, null, context.Topic, context.Headers, RuleMode.Read, null,
                             writerSchema, message);
                     }
                     

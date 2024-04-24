@@ -59,6 +59,7 @@ namespace Confluent.SchemaRegistry.Serdes
 
         private ISchemaRegistryClient schemaRegistryClient;
         private IDictionary<string, IRuleExecutor> ruleExecutors = new Dictionary<string, IRuleExecutor>();
+        private IDictionary<string, IRuleAction> ruleActions = new Dictionary<string, IRuleAction>();
         
         private readonly JsonSchemaGeneratorSettings jsonSchemaGeneratorSettings;
 
@@ -191,7 +192,7 @@ namespace Confluent.SchemaRegistry.Serdes
                     
                     if (writerSchema != null)
                     {
-                        value = (T) SerdeUtils.ExecuteRules(ruleExecutors, context.Component == MessageComponentType.Key, null, context.Topic, context.Headers, RuleMode.Read, null,
+                        value = (T) SerdeUtils.ExecuteRules(ruleExecutors, ruleActions, context.Component == MessageComponentType.Key, null, context.Topic, context.Headers, RuleMode.Read, null,
                             writerSchema, value);
                     }
                     
