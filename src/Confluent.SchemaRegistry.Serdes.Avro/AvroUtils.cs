@@ -20,6 +20,7 @@ using System.Linq;
 using Avro;
 using Avro.Generic;
 using Avro.Specific;
+using Newtonsoft.Json;
 
 
 namespace Confluent.SchemaRegistry.Serdes
@@ -75,14 +76,33 @@ namespace Confluent.SchemaRegistry.Serdes
                                 ISpecificRecord specificRecord = (ISpecificRecord)message;
                                 object value = specificRecord.Get(f.Pos);
                                 object newValue = Transform(ctx, f.Schema, value, fieldTransform);
-                                specificRecord.Put(f.Pos, newValue);
+                                if (ctx.Rule.Kind == RuleKind.Condition)
+                                {
+                                    if (newValue is bool b && !b)
+                                    {
+                                        throw new RuleConditionException(ctx.Rule);
+                                    }
+                                } else
+                                {
+                                    specificRecord.Put(f.Pos, newValue);
+                                }
                             }
                             else if (message is GenericRecord)
                             {
                                 GenericRecord genericRecord = (GenericRecord)message;
                                 object value = genericRecord.GetValue(f.Pos);
                                 object newValue = Transform(ctx, f.Schema, value, fieldTransform);
-                                genericRecord.Add(f.Pos, newValue);
+                                if (ctx.Rule.Kind == RuleKind.Condition)
+                                {
+                                    if (newValue is bool b && !b)
+                                    {
+                                        throw new RuleConditionException(ctx.Rule);
+                                    }
+                                }
+                                else
+                                {
+                                    genericRecord.Add(f.Pos, newValue);
+                                }
                             }
                             else
                             {
@@ -145,16 +165,12 @@ namespace Confluent.SchemaRegistry.Serdes
 
         private static ISet<string> GetInlineTags(Field field)
         {
-            ISet<string> tags = new HashSet<string>();
-            // TODO RULES
-            /*
-            if (fd.getOptions().hasExtension(MetaProto.fieldMeta))
+            String tagsProp = field.GetProperty("confluent:tags");
+            if (tagsProp != null)
             {
-                Meta meta = fd.getOptions().getExtension(MetaProto.fieldMeta);
-                annotations.addAll(meta.getAnnotationList());
+                return JsonConvert.DeserializeObject<ISet<string>>(tagsProp);
             }
-            */
-            return tags;
+            return new HashSet<string>();
         }
 
         private static IUnionResolver GetResolver(Avro.Schema schema, object message)

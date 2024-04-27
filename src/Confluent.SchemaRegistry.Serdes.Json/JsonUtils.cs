@@ -15,6 +15,7 @@
 // Refer to LICENSE for more information.
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -86,7 +87,17 @@ namespace Confluent.SchemaRegistry.Serdes
                         FieldAccessor fieldAccessor = new FieldAccessor(message.GetType(), it.Key);
                         object value = fieldAccessor.GetFieldValue(message);
                         object newValue = Transform(ctx, it.Value, fullName, value, fieldTransform);
-                        fieldAccessor.SetFieldValue(message, newValue);
+                        if (ctx.Rule.Kind == RuleKind.Condition)
+                        {
+                            if (newValue is bool b && !b)
+                            {
+                                throw new RuleConditionException(ctx.Rule);
+                            }
+                        }
+                        else
+                        {
+                            fieldAccessor.SetFieldValue(message, newValue);
+                        }
                     }
                 }
 
@@ -148,16 +159,11 @@ namespace Confluent.SchemaRegistry.Serdes
 
         private static ISet<string> GetInlineTags(JsonSchema schema)
         {
-            ISet<string> tags = new HashSet<string>();
-            // TODO RULES
-            /*
-            if (fd.getOptions().hasExtension(MetaProto.fieldMeta))
+            if (schema.ExtensionData != null && schema.ExtensionData.TryGetValue("confluent:tags", out var tagsProp))
             {
-                Meta meta = fd.getOptions().getExtension(MetaProto.fieldMeta);
-                annotations.addAll(meta.getAnnotationList());
+                return new HashSet<string>(((object[]) tagsProp).Select(x => x.ToString()).ToList());
             }
-            */
-            return tags;
+            return new HashSet<string>();
         }
 
         class FieldAccessor

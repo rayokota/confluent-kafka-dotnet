@@ -173,7 +173,10 @@ namespace Confluent.SchemaRegistry.Serdes.UnitTests
         [Fact]
         public void ISpecificRecordFieldEncryption()
         {
-            var schemaStr = User._SCHEMA.ToString();
+            var schemaStr = "{\"type\":\"record\",\"name\":\"User\",\"namespace\":\"Confluent.Kafka.Examples.AvroSpecific" +
+            "\",\"fields\":[{\"name\":\"name\",\"type\":\"string\",\"confluent:tags\": [ \"PII\" ]},{\"name\":\"favorite_number\",\"type\":[\"i" +
+            "nt\",\"null\"]},{\"name\":\"favorite_color\",\"type\":[\"string\",\"null\"]}]}";
+
             var schema = new RegisteredSchema("topic-value", 1, 1, schemaStr, SchemaType.Avro, null);
             schema.Metadata = new Metadata(new Dictionary<string, ISet<string>>
                 {

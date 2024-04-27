@@ -107,7 +107,9 @@ namespace Confluent.SchemaRegistry.Serdes
                 ((FieldRuleExecutor)executor).FieldTransformer = (ctx, transform, message) =>
                 {
                     // TODO RULES pass imports
-                    var fdSet = ProtobufUtils.Parse(ctx.Target.SchemaString, null);
+                    IDictionary<string, string> references =
+                        SerdeUtils.ResolveReferences(schemaRegistryClient, ctx.Target).Result;
+                    var fdSet = ProtobufUtils.Parse(ctx.Target.SchemaString, references);
                     return ProtobufUtils.Transform(ctx, fdSet, message, transform);
                 };
             }

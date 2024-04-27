@@ -269,7 +269,8 @@ namespace Confluent.SchemaRegistry.Serdes.UnitTests
                   ""type"": ""number""
                 },
                 ""name"": {
-                  ""type"": ""string""
+                  ""type"": ""string"",
+                  ""confluent:tags"": [ ""PII"" ]
                 }
               }
             }";

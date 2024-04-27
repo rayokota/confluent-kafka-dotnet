@@ -127,14 +127,15 @@ namespace Confluent.SchemaRegistry.Serdes.UnitTests
         [Fact]
         public void FieldEncryption()
         {
-            // TODO RULE test inline annotation
             string schemaStr = @"syntax = ""proto3"";
+            import ""confluent/meta.proto"";
+
             package example;
 
             message Person {
                 string favorite_color = 1;
                 int32 favorite_number = 2;
-                string name = 3;
+                string name = 3 [(.confluent.field_meta) = { tags: ""PII"" }];
             }";
             
             var schema = new RegisteredSchema("topic-value", 1, 1, schemaStr, SchemaType.Protobuf, null);

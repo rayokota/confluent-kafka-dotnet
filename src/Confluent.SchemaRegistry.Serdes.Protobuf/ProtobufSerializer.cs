@@ -130,7 +130,9 @@ namespace Confluent.SchemaRegistry.Serdes
                 {
                     // TODO RULES pass imports
                     // TODO cache
-                    var fdSet = ProtobufUtils.Parse(ctx.Target.SchemaString, null);
+                    IDictionary<string, string> references =
+                        SerdeUtils.ResolveReferences(schemaRegistryClient, ctx.Target).Result;
+                    var fdSet = ProtobufUtils.Parse(ctx.Target.SchemaString, references);
                     return ProtobufUtils.Transform(ctx, fdSet, message, transform);
                 };
             }

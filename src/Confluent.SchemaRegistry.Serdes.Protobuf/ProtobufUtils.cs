@@ -20,6 +20,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
+using System.Text;
 using Google.Protobuf;
 using Google.Protobuf.Reflection;
 using ProtobufNet::ProtoBuf.Reflection;
@@ -37,6 +39,47 @@ namespace Confluent.SchemaRegistry.Serdes
     /// </summary>
     public static class ProtobufUtils
     {
+        public static IDictionary<string, string> BuiltIns = new Dictionary<string, string>
+        {
+            { "confluent/meta.proto", GetResource("confluent.meta.proto") },
+            { "confluent/type/decimal.proto", GetResource("confluent.type.decimal.proto") },
+            { "google/type/calendar_period.proto", GetResource("google.type.calendar_period.proto") },
+            { "google/type/color.proto", GetResource("google.type.color.proto") },
+            { "google/type/date.proto", GetResource("google.type.date.proto") },
+            { "google/type/datetime.proto", GetResource("google.type.datetime.proto") },
+            { "google/type/dayofweek.proto", GetResource("google.type.dayofweek.proto") },
+            { "google/type/expr.proto", GetResource("google.type.expr.proto") },
+            { "google/type/fraction.proto", GetResource("google.type.fraction.proto") },
+            { "google/type/latlng.proto", GetResource("google.type.latlng.proto") },
+            { "google/type/money.proto", GetResource("google.type.money.proto") },
+            { "google/type/month.proto", GetResource("google.type.month.proto") },
+            { "google/type/postal_address.proto", GetResource("google.type.postal_address.proto") },
+            { "goole/type/quaternion.proto", GetResource("google.type.quaternion.proto") },
+            { "google/type/timeofday.proto", GetResource("google.type.timeofday.proto") },
+            { "google/protobuf/any.proto", GetResource("google.protobuf.any.proto") },
+            { "google/protobuf/api.proto", GetResource("google.protobuf.api.proto") },
+            { "google/protobuf/descriptor.proto", GetResource("google.protobuf.descriptor.proto") },
+            { "google/protobuf/duration.proto", GetResource("google.protobuf.duration.proto") },
+            { "google/protobuf/empty.proto", GetResource("google.protobuf.empty.proto") },
+            { "google/protobuf/field_mask.proto", GetResource("google.protobuf.field_mask.proto") },
+            { "google/protobuf/source_context.proto", GetResource("google.protobuf.source_context.proto") },
+            { "google/protobuf/struct.proto", GetResource("google.protobuf.struct.proto") },
+            { "google/protobuf/timestamp.proto", GetResource("google.protobuf.timestamp.proto") },
+            { "google/protobuf/type.proto", GetResource("google.protobuf.type.proto") },
+            { "google/protobuf/wrappers.proto", GetResource("google.protobuf.wrappers.proto") }
+        };
+        
+        private static string GetResource(string resourceName)
+        {
+            var info = Assembly.GetExecutingAssembly().GetName();
+            var name = info.Name;
+            var stream = Assembly
+                .GetExecutingAssembly()
+                .GetManifestResourceStream($"{name}.proto.{resourceName}");
+            var streamReader = new StreamReader(stream, Encoding.UTF8);
+            return streamReader.ReadToEnd();
+        }
+
         public static object Transform(RuleContext ctx, object desc, object message,
             FieldTransform fieldTransform)
         {
@@ -73,7 +116,7 @@ namespace Confluent.SchemaRegistry.Serdes
                 foreach (FieldDescriptor fd in copy.Descriptor.Fields.InDeclarationOrder())
                 {
                     FieldDescriptorProto schemaFd = FindFieldByName(messageType, fd.Name);
-                    using (ctx.EnterField(copy, fd.FullName, fd.Name, GetType(fd), GetInlineTags(fd)))
+                    using (ctx.EnterField(copy, fd.FullName, fd.Name, GetType(fd), GetInlineTags(schemaFd)))
                     {
                         object value = fd.Accessor.GetValue(copy);
                         DescriptorProto d = messageType;
@@ -84,7 +127,17 @@ namespace Confluent.SchemaRegistry.Serdes
                         }
 
                         object newValue = Transform(ctx, d, value, fieldTransform);
-                        fd.Accessor.SetValue(copy, newValue);
+                        if (ctx.Rule.Kind == RuleKind.Condition)
+                        {
+                            if (newValue is bool b && !b)
+                            {
+                                throw new RuleConditionException(ctx.Rule);
+                            }
+                        }
+                        else
+                        {
+                            fd.Accessor.SetValue(copy, newValue);
+                        }
                     }
                 }
 
@@ -192,12 +245,12 @@ namespace Confluent.SchemaRegistry.Serdes
             }
         }
 
-        private static ISet<string> GetInlineTags(FieldDescriptor fd)
+        private static ISet<string> GetInlineTags(FieldDescriptorProto fd)
         {
             ISet<string> tags = new HashSet<string>();
-            // TODO RULES
+            var options = fd.Options;
             /*
-            if (fd.getOptions().hasExtension(MetaProto.fieldMeta))
+            if (fd.Options.hasExtension(MetaProto.fieldMeta))
             {
                 Meta meta = fd.getOptions().getExtension(MetaProto.fieldMeta);
                 annotations.addAll(meta.getAnnotationList());

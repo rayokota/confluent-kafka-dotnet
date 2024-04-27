@@ -18,6 +18,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.Serialization;
+using System.Threading.Tasks;
 using Confluent.Kafka;
 
 
@@ -28,6 +29,54 @@ namespace Confluent.SchemaRegistry
     /// </summary>
     public static class SerdeUtils
     {
+        /// <summary>
+        ///     Resolve references
+        /// </summary>
+        /// <param name="client"></param>
+        /// <param name="schema"></param>
+        /// <returns></returns>
+        public static async Task<IDictionary<string, string>> ResolveReferences(ISchemaRegistryClient client, Schema schema)
+        {
+            IList<SchemaReference> references = schema.References;
+            if (references == null)
+            {
+                return new Dictionary<string, string>();
+            }
+
+            IDictionary<string, string> result = new Dictionary<string, string>();
+            ISet<string> visited = new HashSet<string>();
+            result = await ResolveReferences(client, schema, result, visited);
+            return result;
+        }
+        
+        private static async Task<IDictionary<string, string>> ResolveReferences(
+            ISchemaRegistryClient client, Schema schema, IDictionary<string, string> schemas, ISet<string> visited)
+        {
+            IList<SchemaReference> references = schema.References;
+            foreach (SchemaReference reference in references)
+            {
+                if (visited.Contains(reference.Name))
+                {
+                    continue;
+                }
+
+                visited.Add(reference.Name);
+                if (!schemas.ContainsKey(reference.Name))
+                {
+                    Schema s = await client.GetRegisteredSchemaAsync(reference.Subject, reference.Version)
+                        .ConfigureAwait(continueOnCapturedContext: false);
+                    if (s == null)
+                    {
+                        throw new SerializationException("Could not find schema " + reference.Subject + "-" + reference.Version);
+                    }
+                    schemas[reference.Name] = s.SchemaString;
+                    await ResolveReferences(client, s, schemas, visited);
+                }
+            }
+
+            return schemas;
+        }
+        
         /// <summary>
         ///     Execute rules 
         /// </summary>
