@@ -63,6 +63,8 @@
     <EmbeddedResource Include="proto\google\protobuf\timestamp.proto" />
     <None Remove="proto\google\protobuf\type.proto" />
     <EmbeddedResource Include="proto\google\protobuf\type.proto" />
+    <None Remove="proto\google\protobuf\wrappers.proto" />
+    <EmbeddedResource Include="proto\google\protobuf\wrappers.proto" />
     <None Remove="proto\google\type\calendar_period.proto" />
     <EmbeddedResource Include="proto\google\type\calendar_period.proto" />
     <None Remove="proto\google\type\color.proto" />

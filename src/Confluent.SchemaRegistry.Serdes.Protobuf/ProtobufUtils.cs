@@ -22,6 +22,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using Confluent.SchemaRegistry.Serdes.Protobuf;
 using Google.Protobuf;
 using Google.Protobuf.Reflection;
 using ProtobufNet::ProtoBuf.Reflection;
@@ -54,7 +55,7 @@ namespace Confluent.SchemaRegistry.Serdes
             { "google/type/money.proto", GetResource("google.type.money.proto") },
             { "google/type/month.proto", GetResource("google.type.month.proto") },
             { "google/type/postal_address.proto", GetResource("google.type.postal_address.proto") },
-            { "goole/type/quaternion.proto", GetResource("google.type.quaternion.proto") },
+            { "google/type/quaternion.proto", GetResource("google.type.quaternion.proto") },
             { "google/type/timeofday.proto", GetResource("google.type.timeofday.proto") },
             { "google/protobuf/any.proto", GetResource("google.protobuf.any.proto") },
             { "google/protobuf/api.proto", GetResource("google.protobuf.api.proto") },
@@ -248,7 +249,6 @@ namespace Confluent.SchemaRegistry.Serdes
         private static ISet<string> GetInlineTags(FieldDescriptorProto fd)
         {
             ISet<string> tags = new HashSet<string>();
-            var options = fd.Options;
             /*
             if (fd.Options.hasExtension(MetaProto.fieldMeta))
             {
@@ -261,15 +261,14 @@ namespace Confluent.SchemaRegistry.Serdes
 
         public static FileDescriptorSet Parse(string schema, IDictionary<string, string> imports)
         {
-            if (imports == null)
-            {
-                imports = new Dictionary<string, string>();
-            }
+            IDictionary<string, string> allImports = new Dictionary<string, string>(BuiltIns);
+            imports?.ToList().ForEach(x => allImports.Add(x.Key, x.Value));
+            
             var fds = new FileDescriptorSet();
-            fds.FileSystem = new ProtobufImports(imports);
+            fds.FileSystem = new ProtobufImports(allImports);
             
             fds.Add("__root.proto", true, new StringReader(schema));
-            foreach (KeyValuePair<string, string> import in imports)
+            foreach (KeyValuePair<string, string> import in allImports)
             {
                 fds.AddImportPath(import.Key);
                 
