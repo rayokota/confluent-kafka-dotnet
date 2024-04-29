@@ -161,7 +161,10 @@ namespace Confluent.SchemaRegistry.Serdes
         {
             if (schema.ExtensionData != null && schema.ExtensionData.TryGetValue("confluent:tags", out var tagsProp))
             {
-                return new HashSet<string>(((object[]) tagsProp).Select(x => x.ToString()).ToList());
+                if (tagsProp is object[] tags)
+                {
+                    return new HashSet<string>(tags.Select(x => x.ToString()).ToList());
+                }
             }
             return new HashSet<string>();
         }

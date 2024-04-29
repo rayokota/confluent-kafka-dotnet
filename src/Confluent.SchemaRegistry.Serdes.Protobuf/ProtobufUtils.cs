@@ -74,10 +74,10 @@ namespace Confluent.SchemaRegistry.Serdes
         {
             var info = Assembly.GetExecutingAssembly().GetName();
             var name = info.Name;
-            var stream = Assembly
+            using var stream = Assembly
                 .GetExecutingAssembly()
                 .GetManifestResourceStream($"{name}.proto.{resourceName}");
-            var streamReader = new StreamReader(stream, Encoding.UTF8);
+            using var streamReader = new StreamReader(stream, Encoding.UTF8);
             return streamReader.ReadToEnd();
         }
 
@@ -249,13 +249,32 @@ namespace Confluent.SchemaRegistry.Serdes
         private static ISet<string> GetInlineTags(FieldDescriptorProto fd)
         {
             ISet<string> tags = new HashSet<string>();
-            /*
-            if (fd.Options.hasExtension(MetaProto.fieldMeta))
+            var options = fd.Options?.UninterpretedOptions;
+            if (options != null)
             {
-                Meta meta = fd.getOptions().getExtension(MetaProto.fieldMeta);
-                annotations.addAll(meta.getAnnotationList());
+                foreach (var option in options)
+                {
+                    switch (option.Names.Count())
+                    {
+                        case 1:
+                            if (option.Names[0].name_part.Contains("field_meta")
+                                && option.Names[0].name_part.Contains("tags"))
+                            {
+                                tags.Add(option.AggregateValue);
+                            }
+
+                            break;
+                        case 2:
+                            if (option.Names[0].name_part.Contains("field_meta")
+                                && option.Names[1].name_part.Contains("tags"))
+                            {
+                                tags.Add(option.AggregateValue);
+                            }
+
+                            break;
+                    }
+                }
             }
-            */
             return tags;
         }
 
