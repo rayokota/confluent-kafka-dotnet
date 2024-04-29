@@ -128,7 +128,6 @@ namespace Confluent.SchemaRegistry.Serdes
             {
                 ((FieldRuleExecutor)executor).FieldTransformer = (ctx, transform, message) =>
                 {
-                    // TODO RULES pass imports
                     // TODO cache
                     IDictionary<string, string> references =
                         SerdeUtils.ResolveReferences(schemaRegistryClient, ctx.Target).Result;
