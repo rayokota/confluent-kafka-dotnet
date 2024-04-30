@@ -138,11 +138,4 @@ namespace Confluent.SchemaRegistry.Encryption
             }
         }
     }
-
-    public enum DekFormat
-    {
-        AES256_SIV,
-        AES128_GCM,
-        AES256_GCM
-    }
 }

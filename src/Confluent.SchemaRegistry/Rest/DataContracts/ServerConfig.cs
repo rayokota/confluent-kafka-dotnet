@@ -20,12 +20,12 @@ using System.Runtime.Serialization;
 namespace Confluent.SchemaRegistry
 {
     [DataContract]
-    internal class Config
+    public class ServerConfig
     {
         [DataMember(Name = "compatibility")]
         public Compatibility CompatibilityLevel { get; }
         
-        public Config(Compatibility compatibilityLevel)
+        public ServerConfig(Compatibility compatibilityLevel)
         {
             CompatibilityLevel = compatibilityLevel;
         }
@@ -40,7 +40,7 @@ namespace Confluent.SchemaRegistry
                 return false;
             }
 
-            return CompatibilityLevel == ((Config)obj).CompatibilityLevel;
+            return CompatibilityLevel == ((ServerConfig)obj).CompatibilityLevel;
         }
         
         public override int GetHashCode()

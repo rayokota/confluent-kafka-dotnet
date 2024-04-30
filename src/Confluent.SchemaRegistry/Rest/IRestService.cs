@@ -36,8 +36,8 @@ namespace Confluent.SchemaRegistry
         Task<List<string>> GetSubjectsAsync();
         Task<List<int>> GetSubjectVersionsAsync(string subject);
         Task<int> RegisterSchemaAsync(string subject, Schema schema, bool normalize);
-        Task<Config> SetCompatibilityAsync(string subject, Compatibility compatibility);
-        Task<Config> SetGlobalCompatibilityAsync(Compatibility compatibility);
+        Task<ServerConfig> SetCompatibilityAsync(string subject, Compatibility compatibility);
+        Task<ServerConfig> SetGlobalCompatibilityAsync(Compatibility compatibility);
         Task<bool> TestCompatibilityAsync(string subject, int versionId, Schema schema);
         Task<bool> TestLatestCompatibilityAsync(string subject, Schema schema);
         Task<RegisteredSchema> LookupSchemaAsync(string subject, Schema schema, bool ignoreDeletedSchemas, bool normalize);

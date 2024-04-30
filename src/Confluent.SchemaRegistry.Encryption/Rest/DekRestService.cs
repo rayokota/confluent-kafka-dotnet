@@ -27,7 +27,13 @@ using System.Security.Cryptography.X509Certificates;
 
 namespace Confluent.SchemaRegistry
 {
-    public class RestService : IRestService
+    /*
+    /// <remarks>
+    ///     It may be useful to expose this publicly, but this is not
+    ///     required by the Avro serializers, so we will keep this internal
+    ///     for now to minimize documentation / risk of API change etc.
+    /// </remarks>
+    internal class DekRestService : RestService
     {
         private readonly List<SchemaReference> EmptyReferencesList = new List<SchemaReference>();
 
@@ -54,7 +60,7 @@ namespace Confluent.SchemaRegistry
         /// <summary>
         ///     Initializes a new instance of the RestService class.
         /// </summary>
-        public RestService(string schemaRegistryUrl, int timeoutMs,
+        public DekRestService(string schemaRegistryUrl, int timeoutMs,
             IAuthenticationHeaderValueProvider authenticationHeaderValueProvider, List<X509Certificate2> certificates,
             bool enableSslCertificateVerification)
         {
@@ -269,7 +275,7 @@ namespace Confluent.SchemaRegistry
         /// <remarks>
         ///     Used for end points that return a json object { ... }
         /// </remarks>
-        protected async Task<T> RequestAsync<T>(string endPoint, HttpMethod method, params object[] jsonBody)
+        private async Task<T> RequestAsync<T>(string endPoint, HttpMethod method, params object[] jsonBody)
         {
             var response = await ExecuteOnOneInstanceAsync(() => CreateRequest(endPoint, method, jsonBody))
                 .ConfigureAwait(continueOnCapturedContext: false);
@@ -282,7 +288,7 @@ namespace Confluent.SchemaRegistry
         /// <remarks>
         ///     Used for end points that return a json array [ ... ]
         /// </remarks>
-        protected async Task<List<T>> RequestListOfAsync<T>(string endPoint, HttpMethod method, params object[] jsonBody)
+        private async Task<List<T>> RequestListOfAsync<T>(string endPoint, HttpMethod method, params object[] jsonBody)
         {
             var response = await ExecuteOnOneInstanceAsync(() => CreateRequest(endPoint, method, jsonBody))
                 .ConfigureAwait(continueOnCapturedContext: false);
@@ -382,20 +388,20 @@ namespace Confluent.SchemaRegistry
         #region Config
 
         public async Task<Compatibility> GetGlobalCompatibilityAsync()
-            => (await RequestAsync<ServerConfig>("config", HttpMethod.Get)
+            => (await RequestAsync<Config>("config", HttpMethod.Get)
                 .ConfigureAwait(continueOnCapturedContext: false)).CompatibilityLevel;
 
         public async Task<Compatibility> GetCompatibilityAsync(string subject)
-            => (await RequestAsync<ServerConfig>($"config/{WebUtility.UrlEncode(subject)}", HttpMethod.Get)
+            => (await RequestAsync<Config>($"config/{WebUtility.UrlEncode(subject)}", HttpMethod.Get)
                 .ConfigureAwait(continueOnCapturedContext: false)).CompatibilityLevel;
 
-        public async Task<ServerConfig> SetGlobalCompatibilityAsync(Compatibility compatibility)
-            => await RequestAsync<ServerConfig>("config", HttpMethod.Put, new ServerConfig(compatibility))
+        public async Task<Config> SetGlobalCompatibilityAsync(Compatibility compatibility)
+            => await RequestAsync<Config>("config", HttpMethod.Put, new Config(compatibility))
                 .ConfigureAwait(continueOnCapturedContext: false);
 
-        public async Task<ServerConfig> SetCompatibilityAsync(string subject, Compatibility compatibility)
-            => await RequestAsync<ServerConfig>($"config/{WebUtility.UrlEncode(subject)}", HttpMethod.Put,
-                    new ServerConfig(compatibility))
+        public async Task<Config> SetCompatibilityAsync(string subject, Compatibility compatibility)
+            => await RequestAsync<Config>($"config/{WebUtility.UrlEncode(subject)}", HttpMethod.Put,
+                    new Config(compatibility))
                 .ConfigureAwait(continueOnCapturedContext: false);
 
         #endregion Config
@@ -417,4 +423,5 @@ namespace Confluent.SchemaRegistry
             }
         }
     }
+    */
 }
