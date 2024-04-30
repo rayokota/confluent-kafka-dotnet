@@ -31,7 +31,7 @@ namespace Confluent.SchemaRegistry.Encryption
         ///     The DEK version.
         /// </summary>
         [DataMember(Name = "version")]
-        public new int Version { get; set; }
+        public new int? Version { get; set; }
 
         /// <summary>
         ///     The DEK algorithm.
