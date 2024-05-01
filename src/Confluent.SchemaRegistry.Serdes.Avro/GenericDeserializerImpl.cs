@@ -39,13 +39,10 @@ namespace Confluent.SchemaRegistry.Serdes
         private SemaphoreSlim deserializeMutex = new SemaphoreSlim(1);
 
         private ISchemaRegistryClient schemaRegistryClient;
-        private IDictionary<string, IRuleExecutor> ruleExecutors = new Dictionary<string, IRuleExecutor>();
-        private IDictionary<string, IRuleAction> ruleActions = new Dictionary<string, IRuleAction>();
 
-        public GenericDeserializerImpl(ISchemaRegistryClient schemaRegistryClient, IDictionary<string, IRuleExecutor> ruleExecutors)
+        public GenericDeserializerImpl(ISchemaRegistryClient schemaRegistryClient)
         {
             this.schemaRegistryClient = schemaRegistryClient;
-            this.ruleExecutors = ruleExecutors;
         }
 
         public async Task<GenericRecord> Deserialize(string topic, Headers headers, byte[] array, bool isKey)
@@ -107,8 +104,13 @@ namespace Confluent.SchemaRegistry.Serdes
 
                     if (writerSchemaResult != null)
                     {
-                        data = (GenericRecord) SerdeUtils.ExecuteRules(ruleExecutors, ruleActions, isKey, null, topic, headers, RuleMode.Read, null,
-                            writerSchemaResult, data);
+                        FieldTransformer fieldTransformer = (ctx, transform, message) => 
+                        {
+                            var schema = Avro.Schema.Parse(ctx.Target.SchemaString);
+                            return AvroUtils.Transform(ctx, schema, message, transform);
+                        };
+                        data = (GenericRecord) SerdeUtils.ExecuteRules(isKey, null, topic, headers, RuleMode.Read, null,
+                            writerSchemaResult, data, fieldTransformer);
                     }
 
                     return data;

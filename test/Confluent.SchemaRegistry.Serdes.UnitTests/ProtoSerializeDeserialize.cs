@@ -160,7 +160,7 @@ namespace Confluent.SchemaRegistry.Serdes.UnitTests
                 AutoRegisterSchemas = false,
                 UseLatestVersion = true
             };
-            LocalFieldEncryptionExecutor executor = new LocalFieldEncryptionExecutor("mysecret");
+            LocalKmsDriver executor = new LocalKmsDriver("mysecret");
             var serializer = new ProtobufSerializer<Person>(schemaRegistryClient, config, new List<IRuleExecutor> { executor });
             var deserializer = new ProtobufDeserializer<Person>(schemaRegistryClient, null, new List<IRuleExecutor> { executor });
 

@@ -58,8 +58,6 @@ namespace Confluent.SchemaRegistry.Serdes
         private SemaphoreSlim deserializeMutex = new SemaphoreSlim(1);
 
         private ISchemaRegistryClient schemaRegistryClient;
-        private IDictionary<string, IRuleExecutor> ruleExecutors = new Dictionary<string, IRuleExecutor>();
-        private IDictionary<string, IRuleAction> ruleActions = new Dictionary<string, IRuleAction>();
         
         private readonly JsonSchemaGeneratorSettings jsonSchemaGeneratorSettings;
 
@@ -78,19 +76,11 @@ namespace Confluent.SchemaRegistry.Serdes
         {
         }
         
-        public JsonDeserializer(ISchemaRegistryClient schemaRegistryClient, IEnumerable<KeyValuePair<string, string>> config = null, JsonSchemaGeneratorSettings jsonSchemaGeneratorSettings = null, IList<IRuleExecutor> ruleExecutors = null)
+        public JsonDeserializer(ISchemaRegistryClient schemaRegistryClient, IEnumerable<KeyValuePair<string, string>> config = null, JsonSchemaGeneratorSettings jsonSchemaGeneratorSettings = null)
         {
             this.schemaRegistryClient = schemaRegistryClient;
             this.jsonSchemaGeneratorSettings = jsonSchemaGeneratorSettings;
 
-            if (ruleExecutors != null)
-            {
-                foreach (IRuleExecutor executor in ruleExecutors)
-                {
-                    AddRuleExecutor(executor);
-                }
-            }
-            
             if (config == null) { return; }
 
             if (config.Count() > 0)
@@ -99,20 +89,6 @@ namespace Confluent.SchemaRegistry.Serdes
             }
         }
 
-        private void AddRuleExecutor(IRuleExecutor executor)
-        {
-            if (executor is FieldRuleExecutor)
-            {
-                ((FieldRuleExecutor)executor).FieldTransformer = (ctx, transform, message) =>
-                {
-                    var task = JsonSchema.FromJsonAsync(ctx.Target.SchemaString).ConfigureAwait(false);
-                    var schema = task.GetAwaiter().GetResult();
-                    return JsonUtils.Transform(ctx, schema, "$", message, transform);
-                };
-            }
-            ruleExecutors[executor.Type()] = executor;
-        }
-        
         /// <summary>
         ///     Deserialize an object of type <typeparamref name="T"/>
         ///     from a byte array.
@@ -192,8 +168,14 @@ namespace Confluent.SchemaRegistry.Serdes
                     
                     if (writerSchema != null)
                     {
-                        value = (T) SerdeUtils.ExecuteRules(ruleExecutors, ruleActions, context.Component == MessageComponentType.Key, null, context.Topic, context.Headers, RuleMode.Read, null,
-                            writerSchema, value);
+                        FieldTransformer fieldTransformer = (ctx, transform, message) =>
+                        {
+                            var task = JsonSchema.FromJsonAsync(ctx.Target.SchemaString).ConfigureAwait(false);
+                            var schema = task.GetAwaiter().GetResult();
+                            return JsonUtils.Transform(ctx, schema, "$", message, transform);
+                        };
+                        value = (T) SerdeUtils.ExecuteRules(context.Component == MessageComponentType.Key, null, context.Topic, context.Headers, RuleMode.Read, null,
+                            writerSchema, value, fieldTransformer);
                     }
                     
                     return value;

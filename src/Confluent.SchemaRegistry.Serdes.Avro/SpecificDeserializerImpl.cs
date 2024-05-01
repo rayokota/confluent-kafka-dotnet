@@ -46,13 +46,10 @@ namespace Confluent.SchemaRegistry.Serdes
         public global::Avro.Schema ReaderSchema { get; private set; }
 
         private ISchemaRegistryClient schemaRegistryClient;
-        private IDictionary<string, IRuleExecutor> ruleExecutors = new Dictionary<string, IRuleExecutor>();
-        private IDictionary<string, IRuleAction> ruleActions = new Dictionary<string, IRuleAction>();
 
-        public SpecificDeserializerImpl(ISchemaRegistryClient schemaRegistryClient, IDictionary<string, IRuleExecutor> ruleExecutors)
+        public SpecificDeserializerImpl(ISchemaRegistryClient schemaRegistryClient)
         {
             this.schemaRegistryClient = schemaRegistryClient;
-            this.ruleExecutors = ruleExecutors;
 
             if (typeof(ISpecificRecord).IsAssignableFrom(typeof(T)))
             {
@@ -163,8 +160,13 @@ namespace Confluent.SchemaRegistry.Serdes
                     
                     if (writerSchemaJson != null)
                     {
-                        data = (T) SerdeUtils.ExecuteRules(ruleExecutors, ruleActions, isKey, null, topic, headers, RuleMode.Read, null,
-                            writerSchemaJson, data);
+                        FieldTransformer fieldTransformer = (ctx, transform, message) => 
+                        {
+                            var schema = Avro.Schema.Parse(ctx.Target.SchemaString);
+                            return AvroUtils.Transform(ctx, schema, message, transform);
+                        };
+                        data = (T) SerdeUtils.ExecuteRules(isKey, null, topic, headers, RuleMode.Read, null,
+                            writerSchemaJson, data, fieldTransformer);
                     }
 
                     return data;

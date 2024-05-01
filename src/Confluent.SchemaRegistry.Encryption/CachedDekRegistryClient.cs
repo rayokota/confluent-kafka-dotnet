@@ -22,12 +22,6 @@ using System.ComponentModel;
 using System.Threading;
 using System.Security.Cryptography.X509Certificates;
 
-namespace System.Runtime.CompilerServices
-{
-    [EditorBrowsable(EditorBrowsableState.Never)]
-    internal static class IsExternalInit { }
-}
-
 namespace Confluent.SchemaRegistry.Encryption
 {
     /// <summary>

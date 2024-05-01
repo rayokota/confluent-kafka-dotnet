@@ -46,7 +46,6 @@ namespace Confluent.SchemaRegistry.Serdes
         private IAvroSerializerImpl<T> serializerImpl;
 
         private ISchemaRegistryClient schemaRegistryClient;
-        private IDictionary<string, IRuleExecutor> ruleExecutors = new Dictionary<string, IRuleExecutor>();
 
         /// <summary>
         ///     The default initial size (in bytes) of buffers used for message 
@@ -87,18 +86,10 @@ namespace Confluent.SchemaRegistry.Serdes
         ///     Serializer configuration properties (refer to 
         ///     <see cref="AvroSerializerConfig" />)
         /// </param>
-        public AvroSerializer(ISchemaRegistryClient schemaRegistryClient, AvroSerializerConfig config = null, IList<IRuleExecutor> ruleExecutors = null)
+        public AvroSerializer(ISchemaRegistryClient schemaRegistryClient, AvroSerializerConfig config = null)
         {
             this.schemaRegistryClient = schemaRegistryClient;
 
-            if (ruleExecutors != null)
-            {
-                foreach (IRuleExecutor executor in ruleExecutors)
-                {
-                    AddRuleExecutor(executor);
-                }
-            }
-            
             if (config == null) { return; }
 
             var nonAvroConfig = config.Where(item => !item.Key.StartsWith("avro."));
@@ -129,19 +120,6 @@ namespace Confluent.SchemaRegistry.Serdes
             {
                 throw new ArgumentException($"AvroSerializer: cannot enable both use.latest.version and auto.register.schemas");
             }
-        }
-
-        private void AddRuleExecutor(IRuleExecutor executor)
-        {
-            if (executor is FieldRuleExecutor)
-            {
-                ((FieldRuleExecutor)executor).FieldTransformer = (ctx, transform, message) =>
-                {
-                    var schema = Avro.Schema.Parse(ctx.Target.SchemaString);
-                    return AvroUtils.Transform(ctx, schema, message, transform);
-                };
-            }
-            ruleExecutors[executor.Type()] = executor;
         }
 
         /// <summary>
@@ -177,8 +155,8 @@ namespace Confluent.SchemaRegistry.Serdes
                 if (serializerImpl == null)
                 {
                     serializerImpl = typeof(T) == typeof(GenericRecord)
-                        ? (IAvroSerializerImpl<T>)new GenericSerializerImpl(schemaRegistryClient, autoRegisterSchema, normalizeSchemas, useLatestVersion, initialBufferSize, subjectNameStrategy, ruleExecutors)
-                        : new SpecificSerializerImpl<T>(schemaRegistryClient, autoRegisterSchema, normalizeSchemas, useLatestVersion, initialBufferSize, subjectNameStrategy, ruleExecutors);
+                        ? (IAvroSerializerImpl<T>)new GenericSerializerImpl(schemaRegistryClient, autoRegisterSchema, normalizeSchemas, useLatestVersion, initialBufferSize, subjectNameStrategy)
+                        : new SpecificSerializerImpl<T>(schemaRegistryClient, autoRegisterSchema, normalizeSchemas, useLatestVersion, initialBufferSize, subjectNameStrategy);
                 }
 
                 return await serializerImpl.Serialize(context.Topic, context.Headers, value, context.Component == MessageComponentType.Key).ConfigureAwait(continueOnCapturedContext: false);

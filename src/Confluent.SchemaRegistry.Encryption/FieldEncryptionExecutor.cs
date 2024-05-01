@@ -5,11 +5,18 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using Microsoft.Extensions.Caching.Memory;
+using System.Runtime.CompilerServices;
 
 namespace Confluent.SchemaRegistry.Encryption
 {
     public class FieldEncryptionExecutor : FieldRuleExecutor
     {
+        [ModuleInitializer]
+        internal static void Register()
+        {
+            RuleRegistry.RegisterRuleExecutor("ENCRYPT", new FieldEncryptionExecutor());
+        }
+
         public static readonly string HeaderNamePrefix = "encrypt";
 
         private static readonly string EncryptMap = "encryptMap";
@@ -29,6 +36,7 @@ namespace Confluent.SchemaRegistry.Encryption
         private bool valueDeterministic = false;
         private readonly IMemoryCache dekEncryptCache;
         private readonly IMemoryCache dekDecryptCache;
+
 
         public FieldEncryptionExecutor()
         {
@@ -174,7 +182,7 @@ namespace Confluent.SchemaRegistry.Encryption
         {
             string key = cryptor.DekFormat.ToString();
             // Cache on rule context to ensure dek lives during life of entire transformation
-            IDictionary<string, Dek> dict = (IDictionary<string, Dek>) 
+            IDictionary<string, Dek> dict = (IDictionary<string, Dek>)
                 ComputeIfAbsent(ctx.CustomData, EncryptMap, () => new Dictionary<string, Dek>());
             return ComputeIfAbsent(dict, key, () =>
             {
@@ -199,7 +207,7 @@ namespace Confluent.SchemaRegistry.Encryption
         {
             ByteArrayKey key = new ByteArrayKey(encryptedDek);
             // Cache on rule context to ensure dek lives during life of entire transformation
-            IDictionary<ByteArrayKey, Dek> dict = (IDictionary<ByteArrayKey, Dek>) 
+            IDictionary<ByteArrayKey, Dek> dict = (IDictionary<ByteArrayKey, Dek>)
                 ComputeIfAbsent(ctx.CustomData, DecryptMap, () => new Dictionary<ByteArrayKey, Dek>());
             return ComputeIfAbsent(dict, key, () =>
             {
@@ -227,7 +235,7 @@ namespace Confluent.SchemaRegistry.Encryption
                 dict.Add(key, val);
             }
 
-            return (TValue) val;
+            return (TValue)val;
         }
 
         private Cryptor GetCryptor(bool isKey)
@@ -238,7 +246,8 @@ namespace Confluent.SchemaRegistry.Encryption
         private Cryptor GetCryptor(DekFormat dekFormat)
         {
             bool exists = cryptors.TryGetValue(dekFormat, out Cryptor value);
-            if (exists) {
+            if (exists)
+            {
                 return value;
             }
 

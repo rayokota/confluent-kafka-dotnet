@@ -64,8 +64,6 @@ namespace Confluent.SchemaRegistry.Serdes
         private SubjectNameStrategyDelegate subjectNameStrategy = null;
         private ISchemaRegistryClient schemaRegistryClient;
         private readonly JsonSchemaGeneratorSettings jsonSchemaGeneratorSettings;
-        private IDictionary<string, IRuleExecutor> ruleExecutors = new Dictionary<string, IRuleExecutor>();
-        private IDictionary<string, IRuleAction> ruleActions = new Dictionary<string, IRuleAction>();
         
         private HashSet<string> subjectsRegistered = new HashSet<string>();
         private SemaphoreSlim serializeMutex = new SemaphoreSlim(1);
@@ -95,7 +93,7 @@ namespace Confluent.SchemaRegistry.Serdes
         /// <param name="jsonSchemaGeneratorSettings">
         ///     JSON schema generator settings.
         /// </param>
-        public JsonSerializer(ISchemaRegistryClient schemaRegistryClient, JsonSerializerConfig config = null, JsonSchemaGeneratorSettings jsonSchemaGeneratorSettings = null, IList<IRuleExecutor> ruleExecutors = null)
+        public JsonSerializer(ISchemaRegistryClient schemaRegistryClient, JsonSerializerConfig config = null, JsonSchemaGeneratorSettings jsonSchemaGeneratorSettings = null)
         {
             this.schemaRegistryClient = schemaRegistryClient;
             this.jsonSchemaGeneratorSettings = jsonSchemaGeneratorSettings;
@@ -106,14 +104,6 @@ namespace Confluent.SchemaRegistry.Serdes
             this.schemaFullname = schema.Title;
             this.schemaText = schema.ToJson();
 
-            if (ruleExecutors != null)
-            {
-                foreach (IRuleExecutor executor in ruleExecutors)
-                {
-                    AddRuleExecutor(executor);
-                }
-            }
-            
             if (config == null) { return; }
 
             var nonJsonConfig = config.Where(item => !item.Key.StartsWith("json."));
@@ -132,20 +122,6 @@ namespace Confluent.SchemaRegistry.Serdes
             {
                 throw new ArgumentException($"JsonSerializer: cannot enable both use.latest.version and auto.register.schemas");
             }
-        }
-
-        private void AddRuleExecutor(IRuleExecutor executor)
-        {
-            if (executor is FieldRuleExecutor)
-            {
-                ((FieldRuleExecutor)executor).FieldTransformer = (ctx, transform, message) =>
-                {
-                    var task = JsonSchema.FromJsonAsync(ctx.Target.SchemaString).ConfigureAwait(false);
-                    var schema = task.GetAwaiter().GetResult();
-                    return JsonUtils.Transform(ctx, schema, "$", message, transform);
-                };
-            }
-            ruleExecutors[executor.Type()] = executor;
         }
 
         /// <summary>
@@ -219,8 +195,14 @@ namespace Confluent.SchemaRegistry.Serdes
                 
                 if (latestSchema != null)
                 {
-                    value = (T)SerdeUtils.ExecuteRules(ruleExecutors, ruleActions, context.Component == MessageComponentType.Key, subject, context.Topic, context.Headers, RuleMode.Write, null,
-                        latestSchema, value);
+                    FieldTransformer fieldTransformer = (ctx, transform, message) =>
+                    {
+                        var task = JsonSchema.FromJsonAsync(ctx.Target.SchemaString).ConfigureAwait(false);
+                        var schema = task.GetAwaiter().GetResult();
+                        return JsonUtils.Transform(ctx, schema, "$", message, transform);
+                    };
+                    value = (T)SerdeUtils.ExecuteRules(context.Component == MessageComponentType.Key, subject, context.Topic, context.Headers, RuleMode.Write, null,
+                        latestSchema, value, fieldTransformer);
                 }
 
                 var serializedString = Newtonsoft.Json.JsonConvert.SerializeObject(value, this.jsonSchemaGeneratorSettings?.ActualSerializerSettings);

@@ -40,7 +40,6 @@ namespace Confluent.SchemaRegistry.Serdes
         private IAvroDeserializerImpl<T> deserializerImpl;
 
         private ISchemaRegistryClient schemaRegistryClient;
-        private IDictionary<string, IRuleExecutor> ruleExecutors = new Dictionary<string, IRuleExecutor>();
 
         /// <summary>
         ///     Initialize a new AvroDeserializer instance.
@@ -53,17 +52,9 @@ namespace Confluent.SchemaRegistry.Serdes
         ///     Deserializer configuration properties (refer to 
         ///     <see cref="AvroDeserializerConfig" />).
         /// </param>
-        public AvroDeserializer(ISchemaRegistryClient schemaRegistryClient, IEnumerable<KeyValuePair<string, string>> config = null, IList<IRuleExecutor> ruleExecutors = null)
+        public AvroDeserializer(ISchemaRegistryClient schemaRegistryClient, IEnumerable<KeyValuePair<string, string>> config = null)
         {
             this.schemaRegistryClient = schemaRegistryClient;
-            
-            if (ruleExecutors != null)
-            {
-                foreach (IRuleExecutor executor in ruleExecutors)
-                {
-                    AddRuleExecutor(executor);
-                }
-            }
             
             if (config == null) { return; }
 
@@ -78,19 +69,6 @@ namespace Confluent.SchemaRegistry.Serdes
             {
                 throw new ArgumentException($"AvroDeserializer: unknown configuration parameter {avroConfig.First().Key}");
             }
-        }
-
-        private void AddRuleExecutor(IRuleExecutor executor)
-        {
-            if (executor is FieldRuleExecutor)
-            {
-                ((FieldRuleExecutor)executor).FieldTransformer = (ctx, transform, message) =>
-                {
-                    var schema = Avro.Schema.Parse(ctx.Target.SchemaString);
-                    return AvroUtils.Transform(ctx, schema, message, transform);
-                };
-            }
-            ruleExecutors[executor.Type()] = executor;
         }
 
         /// <summary>
@@ -130,8 +108,8 @@ namespace Confluent.SchemaRegistry.Serdes
                 if (deserializerImpl == null)
                 {
                     deserializerImpl = (typeof(T) == typeof(GenericRecord))
-                        ? (IAvroDeserializerImpl<T>)new GenericDeserializerImpl(schemaRegistryClient, ruleExecutors)
-                        : new SpecificDeserializerImpl<T>(schemaRegistryClient, ruleExecutors);
+                        ? (IAvroDeserializerImpl<T>)new GenericDeserializerImpl(schemaRegistryClient)
+                        : new SpecificDeserializerImpl<T>(schemaRegistryClient);
                 }
 
                 // TODO: change this interface such that it takes ReadOnlyMemory<byte>, not byte[].

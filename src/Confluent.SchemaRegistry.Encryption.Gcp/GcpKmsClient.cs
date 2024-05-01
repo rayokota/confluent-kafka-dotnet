@@ -9,8 +9,6 @@ namespace Confluent.SchemaRegistry.Encryption.Gcp
 {
     public class GcpKmsClient : IKmsClient
     {
-        public static readonly string Prefix = "gcp-kms://";
-
         private KeyManagementServiceClient kmsClient;
         private string keyId;
         private CryptoKeyName keyName;
@@ -21,12 +19,17 @@ namespace Confluent.SchemaRegistry.Encryption.Gcp
         {
             KekId = kekId;
             
-            if (!kekId.StartsWith(Prefix)) {
-              throw new ArgumentException(string.Format($"key URI must start with {Prefix}"));
+            if (!kekId.StartsWith(GcpKmsDriver.Prefix)) {
+              throw new ArgumentException(string.Format($"key URI must start with {GcpKmsDriver.Prefix}"));
             }
-            keyId = KekId.Substring(Prefix.Length);
+            keyId = KekId.Substring(GcpKmsDriver.Prefix.Length);
             keyName = CryptoKeyName.Parse(keyId);
             kmsClient = KeyManagementServiceClient.Create();
+        }
+
+        public bool DoesSupport(string uri)
+        {
+            return uri.StartsWith(GcpKmsDriver.Prefix);
         }
         
         public async Task<byte[]> Encrypt(byte[] plaintext)

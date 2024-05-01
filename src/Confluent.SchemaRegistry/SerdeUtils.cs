@@ -94,10 +94,9 @@ namespace Confluent.SchemaRegistry
         /// <exception cref="RuleConditionException"></exception>
         /// <exception cref="ArgumentException"></exception>
         public static object ExecuteRules(
-            IDictionary<string, IRuleExecutor> ruleExecutors, 
-            IDictionary<string, IRuleAction> ruleActions, bool isKey,
-            string subject, string topic, Headers headers,
-            RuleMode ruleMode, Schema source, Schema target, object message)
+            bool isKey, string subject, string topic, Headers headers,
+            RuleMode ruleMode, Schema source, Schema target, object message,
+            FieldTransformer fieldTransformer)
         {
             if (message == null || target == null)
             {
@@ -157,7 +156,7 @@ namespace Confluent.SchemaRegistry
 
                 RuleContext ctx = new RuleContext(source, target,
                     subject, topic, headers, isKey, ruleMode, rule, i, rules);
-                if (ruleExecutors.TryGetValue(rule.Type.ToUpper(), out IRuleExecutor ruleExecutor))
+                if (RuleRegistry.TryGetRuleExecutor(rule.Type.ToUpper(), out IRuleExecutor ruleExecutor))
                 {
                     try
                     {
@@ -177,25 +176,25 @@ namespace Confluent.SchemaRegistry
                             default:
                                 throw new ArgumentException("Unsupported rule kind " + rule.Kind);
                         }
-                        RunAction(ruleActions, ctx, ruleMode, rule, message != null ? rule.OnSuccess : rule.OnFailure,
+                        RunAction(ctx, ruleMode, rule, message != null ? rule.OnSuccess : rule.OnFailure,
                             message, null, message != null ? null : ErrorAction.ActionType);
                     }
                     catch (RuleException ex)
                     {
-                        RunAction(ruleActions, ctx, ruleMode, rule, rule.OnFailure, message, 
+                        RunAction(ctx, ruleMode, rule, rule.OnFailure, message, 
                             ex, ErrorAction.ActionType);
                     }
                 }
                 else
                 {
-                    RunAction(ruleActions, ctx, ruleMode, rule, rule.OnFailure, message, 
+                    RunAction(ctx, ruleMode, rule, rule.OnFailure, message, 
                         new RuleException("Could not find rule executor of type " + rule.Type), ErrorAction.ActionType);
                 }
             }
             return message;
         }
 
-        private static void RunAction(IDictionary<string, IRuleAction> ruleActions, RuleContext ctx, RuleMode ruleMode, 
+        private static void RunAction(RuleContext ctx, RuleMode ruleMode, 
             Rule rule, string action, object message, RuleException ex, string defaultAction)
         {
             string actionName = GetRuleActionName(rule, ruleMode, action);
@@ -205,7 +204,7 @@ namespace Confluent.SchemaRegistry
             }
             if (actionName != null)
             {
-                IRuleAction ruleAction = GetRuleAction(ruleActions, actionName);
+                IRuleAction ruleAction = GetRuleAction(actionName);
                 if (ruleAction == null)
                 {
                     throw new SerializationException("Could not find rule action of type " + actionName);
@@ -243,7 +242,7 @@ namespace Confluent.SchemaRegistry
             return actionName;
         }
 
-        private static IRuleAction GetRuleAction(IDictionary<string, IRuleAction> ruleActions, string actionName)
+        private static IRuleAction GetRuleAction(string actionName)
         {
             if (actionName == ErrorAction.ActionType)
             {
@@ -253,7 +252,7 @@ namespace Confluent.SchemaRegistry
             {
                 return new NoneAction();
             }
-            ruleActions.TryGetValue(actionName.ToUpper(), out IRuleAction action);
+            RuleRegistry.TryGetRuleAction(actionName.ToUpper(), out IRuleAction action);
             return action;
         }
     }

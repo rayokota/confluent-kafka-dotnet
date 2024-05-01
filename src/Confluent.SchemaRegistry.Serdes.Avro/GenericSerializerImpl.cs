@@ -44,8 +44,6 @@ namespace Confluent.SchemaRegistry.Serdes
         private Dictionary<string, int> schemaIds = new Dictionary<string, int>();
 
         private SemaphoreSlim serializeMutex = new SemaphoreSlim(1);
-        private IDictionary<string, IRuleExecutor> ruleExecutors = new Dictionary<string, IRuleExecutor>();
-        private IDictionary<string, IRuleAction> ruleActions = new Dictionary<string, IRuleAction>();
 
         public GenericSerializerImpl(
             ISchemaRegistryClient schemaRegistryClient,
@@ -53,8 +51,7 @@ namespace Confluent.SchemaRegistry.Serdes
             bool normalizeSchemas,
             bool useLatestVersion,
             int initialBufferSize,
-            SubjectNameStrategyDelegate subjectNameStrategy,
-            IDictionary<string, IRuleExecutor> ruleExecutors)
+            SubjectNameStrategyDelegate subjectNameStrategy)
         {
             this.schemaRegistryClient = schemaRegistryClient;
             this.autoRegisterSchema = autoRegisterSchema;
@@ -62,7 +59,6 @@ namespace Confluent.SchemaRegistry.Serdes
             this.useLatestVersion = useLatestVersion;
             this.initialBufferSize = initialBufferSize;
             this.subjectNameStrategy = subjectNameStrategy;
-            this.ruleExecutors = ruleExecutors;
         }
 
         /// <summary>
@@ -190,8 +186,13 @@ namespace Confluent.SchemaRegistry.Serdes
 
                 if (latestSchema != null)
                 {
-                    data = (GenericRecord)SerdeUtils.ExecuteRules(ruleExecutors, ruleActions, isKey, subject, topic, headers, RuleMode.Write, null,
-                        latestSchema, data);
+                    FieldTransformer fieldTransformer = (ctx, transform, message) => 
+                    {
+                        var schema = Avro.Schema.Parse(ctx.Target.SchemaString);
+                        return AvroUtils.Transform(ctx, schema, message, transform);
+                    };
+                    data = (GenericRecord)SerdeUtils.ExecuteRules(isKey, subject, topic, headers, RuleMode.Write, null,
+                        latestSchema, data, fieldTransformer);
                 }
 
                 using (var stream = new MemoryStream(initialBufferSize))

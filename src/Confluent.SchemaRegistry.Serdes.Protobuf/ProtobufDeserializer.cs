@@ -53,8 +53,6 @@ namespace Confluent.SchemaRegistry.Serdes
         private SemaphoreSlim deserializeMutex = new SemaphoreSlim(1);
 
         private ISchemaRegistryClient schemaRegistryClient;
-        private IDictionary<string, IRuleExecutor> ruleExecutors = new Dictionary<string, IRuleExecutor>();
-        private IDictionary<string, IRuleAction> ruleActions = new Dictionary<string, IRuleAction>();
         
         private bool useDeprecatedFormat = false;
         
@@ -71,20 +69,12 @@ namespace Confluent.SchemaRegistry.Serdes
         {
         }
         
-        public ProtobufDeserializer(ISchemaRegistryClient schemaRegistryClient, IEnumerable<KeyValuePair<string, string>> config = null, IList<IRuleExecutor> ruleExecutors = null)
+        public ProtobufDeserializer(ISchemaRegistryClient schemaRegistryClient, IEnumerable<KeyValuePair<string, string>> config = null)
         {
             this.schemaRegistryClient = schemaRegistryClient;
 
             this.parser = new MessageParser<T>(() => new T());
 
-            if (ruleExecutors != null)
-            {
-                foreach (IRuleExecutor executor in ruleExecutors)
-                {
-                    AddRuleExecutor(executor);
-                }
-            }
-            
             if (config == null) { return; }
 
             var nonProtobufConfig = config.Where(item => !item.Key.StartsWith("protobuf."));
@@ -98,22 +88,6 @@ namespace Confluent.SchemaRegistry.Serdes
             {
                 this.useDeprecatedFormat = protobufConfig.UseDeprecatedFormat.Value;
             }
-        }
-
-        private void AddRuleExecutor(IRuleExecutor executor)
-        {
-            if (executor is FieldRuleExecutor)
-            {
-                ((FieldRuleExecutor)executor).FieldTransformer = (ctx, transform, message) =>
-                {
-                    // TODO cache
-                    IDictionary<string, string> references =
-                        SerdeUtils.ResolveReferences(schemaRegistryClient, ctx.Target).Result;
-                    var fdSet = ProtobufUtils.Parse(ctx.Target.SchemaString, references);
-                    return ProtobufUtils.Transform(ctx, fdSet, message, transform);
-                };
-            }
-            ruleExecutors[executor.Type()] = executor;
         }
 
         /// <summary>
@@ -204,8 +178,16 @@ namespace Confluent.SchemaRegistry.Serdes
                     
                     if (writerSchema != null)
                     {
-                        message = (T) SerdeUtils.ExecuteRules(ruleExecutors, ruleActions, context.Component == MessageComponentType.Key, null, context.Topic, context.Headers, RuleMode.Read, null,
-                            writerSchema, message);
+                        FieldTransformer fieldTransformer = (ctx, transform, message) =>
+                        {
+                            // TODO cache
+                            IDictionary<string, string> references =
+                                SerdeUtils.ResolveReferences(schemaRegistryClient, ctx.Target).Result;
+                            var fdSet = ProtobufUtils.Parse(ctx.Target.SchemaString, references);
+                            return ProtobufUtils.Transform(ctx, fdSet, message, transform);
+                        };
+                        message = (T) SerdeUtils.ExecuteRules(context.Component == MessageComponentType.Key, null, context.Topic, context.Headers, RuleMode.Read, null,
+                            writerSchema, message, fieldTransformer);
                     }
                     
                     return message;

@@ -7,8 +7,6 @@ namespace Confluent.SchemaRegistry.Encryption.Azure
 {
     public class AzureKmsClient : IKmsClient
     {
-        public static readonly string Prefix = "azure-kms://";
-
         private CryptographyClient kmsClient;
         private ClientSecretCredential credential;
         private string keyId;
@@ -25,11 +23,16 @@ namespace Confluent.SchemaRegistry.Encryption.Azure
             ClientId = clientId;
             ClientSecret = clientSecret;
             
-            if (!kekId.StartsWith(Prefix)) {
-              throw new ArgumentException(string.Format($"key URI must start with {Prefix}"));
+            if (!kekId.StartsWith(AzureKmsDriver.Prefix)) {
+              throw new ArgumentException(string.Format($"key URI must start with {AzureKmsDriver.Prefix}"));
             }
-            keyId = KekId.Substring(Prefix.Length);
+            keyId = KekId.Substring(AzureKmsDriver.Prefix.Length);
             credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
+        }
+        
+        public bool DoesSupport(string uri)
+        {
+            return uri.StartsWith(AzureKmsDriver.Prefix); 
         }
         
         public async Task<byte[]> Encrypt(byte[] plaintext)
