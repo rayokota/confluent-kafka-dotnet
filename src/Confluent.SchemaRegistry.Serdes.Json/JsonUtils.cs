@@ -34,7 +34,7 @@ namespace Confluent.SchemaRegistry.Serdes
     public static class JsonUtils
     {
         public static object Transform(RuleContext ctx, JsonSchema schema, string path, object message,
-            FieldTransform fieldTransform)
+            IFieldTransform fieldTransform)
         {
             if (schema == null || message == null)
             {
@@ -122,7 +122,7 @@ namespace Confluent.SchemaRegistry.Serdes
                             intersect.IntersectWith(ctx.Rule.Tags);
                             if (intersect.Count != 0)
                             {
-                                return fieldTransform.Invoke(ctx, fieldContext, message);
+                                return fieldTransform.Transform(ctx, fieldContext, message);
                             }
                             break;
                         case JsonObjectType.Null:

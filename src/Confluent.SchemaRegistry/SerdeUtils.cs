@@ -155,7 +155,7 @@ namespace Confluent.SchemaRegistry
                 }
 
                 RuleContext ctx = new RuleContext(source, target,
-                    subject, topic, headers, isKey, ruleMode, rule, i, rules);
+                    subject, topic, headers, isKey, ruleMode, rule, i, rules, fieldTransformer);
                 if (RuleRegistry.TryGetRuleExecutor(rule.Type.ToUpper(), out IRuleExecutor ruleExecutor))
                 {
                     try

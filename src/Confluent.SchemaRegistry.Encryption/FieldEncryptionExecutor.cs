@@ -1,10 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Text;
-using Microsoft.Extensions.Caching.Memory;
 using System.Runtime.CompilerServices;
 
 namespace Confluent.SchemaRegistry.Encryption
@@ -14,251 +13,73 @@ namespace Confluent.SchemaRegistry.Encryption
         [ModuleInitializer]
         internal static void Register()
         {
-            RuleRegistry.RegisterRuleExecutor("ENCRYPT", new FieldEncryptionExecutor());
+            RuleRegistry.RegisterRuleExecutor(RuleType, new FieldEncryptionExecutor());
         }
 
-        public static readonly string HeaderNamePrefix = "encrypt";
+        public static readonly string RuleType = "ENCRYPT";
+        
+        public static readonly string EncryptKekName = "encrypt.kek.name";
+        public static readonly string EncryptKmsKeyid = "encrypt.kms.key.id";
+        public static readonly string EncryptKmsType = "encrypt.kms.type";
+        public static readonly string EncryptDekAlgorithm = "encrypt.dek.algorithm";
+        public static readonly string EncryptDekExpiryDays = "encrypt.dek.expiry.days";
+        
+        public static readonly string KmsTypeSuffix = "://";
 
-        private static readonly string EncryptMap = "encryptMap";
-        private static readonly string DecryptMap = "decryptMap";
+        internal static readonly int LatestVersion = 1;
+        internal static readonly byte MagicByte = 0x0;
+        internal static readonly int MillisInDay = 24 * 60 * 60 * 1000;
+        internal static readonly int VersionSize = 4;
 
-        private static byte Version = 0;
-        private static int LengthVersion = 1;
-        private static int LengthEncryptedDek = 4;
-        private static int LengthKekId = 4;
-        private static int LengthDekFormat = 4;
-
-        protected string kekId;
-        private IDictionary<DekFormat, Cryptor> cryptors;
-        private int cacheExpirySecs = 300;
-        private int cacheSize = 1000;
-        private bool keyDeterministic = false;
-        private bool valueDeterministic = false;
-        private readonly IMemoryCache dekEncryptCache;
-        private readonly IMemoryCache dekDecryptCache;
-
+        internal IDictionary<DekFormat, Cryptor> Cryptors;
+        internal IEnumerable<KeyValuePair<string, string>> Configs;
+        internal IDekRegistryClient Client;
 
         public FieldEncryptionExecutor()
         {
-            dekEncryptCache = new MemoryCache(new MemoryCacheOptions
-            {
-                ExpirationScanFrequency = TimeSpan.FromSeconds(cacheExpirySecs),
-                SizeLimit = cacheSize
-            });
-            dekDecryptCache = new MemoryCache(new MemoryCacheOptions
-            {
-                SizeLimit = cacheSize
-            });
-            cryptors = new Dictionary<DekFormat, Cryptor>();
+        }
+        
+        public override void Configure(IEnumerable<KeyValuePair<string, string>> config)
+        {
+            Configs = config;
+            Client = new CachedDekRegistryClient(Configs);
+            Cryptors = new Dictionary<DekFormat, Cryptor>();
         }
 
-        public override string Type() => "ENCRYPT";
+        public override string Type() => RuleType;
 
-        private static DekFormat GetKeyFormat(bool isDeterministic)
+        protected override IFieldTransform newTransform(RuleContext ctx)
         {
-            // TODO RULES fix gcm in tests
-            return isDeterministic ? DekFormat.AES256_SIV : DekFormat.AES256_GCM;
+            FieldEncryptionExecutorTransform transform = new FieldEncryptionExecutorTransform(this);
+            transform.Init(ctx);
+            return transform;
         }
 
-        protected override FieldTransform newTransform(RuleContext ctx)
+        internal Cryptor GetCryptor(RuleContext ctx)
         {
-            return execute;
-        }
-
-        private object execute(RuleContext ctx, RuleContext.FieldContext fieldCtx, object obj)
-        {
-            byte[] plaintext;
-            byte[] ciphertext;
-            byte[] metadata;
-            switch (ctx.RuleMode)
+            string algorithm = ctx.GetParameter(EncryptDekAlgorithm);
+            if (!Enum.TryParse<>(algorithm, out DekFormat dekFormat))
             {
-                case RuleMode.Write:
-                    plaintext = ToBytes(fieldCtx, obj);
-                    if (plaintext == null)
-                    {
-                        return obj;
-                    }
-
-                    Cryptor cryptor = GetCryptor(ctx.IsKey);
-                    Dek dek = GetDekForEncrypt(ctx, cryptor);
-                    ciphertext = cryptor.Encrypt(dek.RawDek, plaintext);
-                    metadata = BuildMetadata(cryptor.DekFormat.ToString(), dek.EncryptedDek);
-                    string headerName = GetHeaderName(ctx);
-                    if (!ctx.Headers.TryGetLastBytes(headerName, out _))
-                    {
-                        ctx.Headers.Add(headerName, metadata);
-                    }
-
-                    return Convert.ToBase64String(ciphertext);
-                case RuleMode.Read:
-                    if (!ctx.Headers.TryGetLastBytes(GetHeaderName(ctx), out metadata))
-                    {
-                        return obj;
-                    }
-
-                    ciphertext = Convert.FromBase64String(obj.ToString());
-                    plaintext = Decrypt(ctx, metadata, ciphertext);
-                    object result = ToObject(fieldCtx, plaintext);
-                    return result != null ? result : obj;
-                default:
-                    throw new ArgumentException("Unsupported rule mode " + ctx.RuleMode);
+                dekFormat = DekFormat.AES256_GCM;
             }
-        }
-
-        private byte[] BuildMetadata(string dekFormat, byte[] encryptedDek)
-        {
-            byte[] kekBytes = Encoding.UTF8.GetBytes(kekId);
-            byte[] dekBytes = Encoding.UTF8.GetBytes(dekFormat);
-            byte[] buffer = new byte[LengthVersion
-                                     + LengthKekId + kekBytes.Length
-                                     + LengthDekFormat + dekBytes.Length
-                                     + LengthEncryptedDek + encryptedDek.Length];
-            using (MemoryStream stream = new MemoryStream(buffer))
-            {
-                using (BinaryWriter writer = new BinaryWriter(stream))
-                {
-                    writer.Write(Version);
-                    writer.Write(kekBytes.Length);
-                    writer.Write(kekBytes);
-                    writer.Write(dekBytes.Length);
-                    writer.Write(dekBytes);
-                    writer.Write(encryptedDek.Length);
-                    writer.Write(encryptedDek);
-                    return stream.ToArray();
-                }
-            }
-        }
-
-        private byte[] Decrypt(RuleContext ctx, byte[] metadata, byte[] ciphertext)
-        {
-            using (MemoryStream stream = new MemoryStream(metadata))
-            {
-                using (BinaryReader reader = new BinaryReader(stream))
-                {
-                    int remainingSize = metadata.Length;
-                    reader.ReadByte();
-                    remainingSize--;
-                    int kekIdSize = reader.ReadInt32();
-                    remainingSize -= LengthKekId;
-                    if (kekIdSize <= 0 || kekIdSize > remainingSize)
-                    {
-                        throw new ArgumentException("invalid ciphertext");
-                    }
-
-                    byte[] kekId = reader.ReadBytes(kekIdSize);
-                    remainingSize -= kekIdSize;
-                    int dekFormatSize = reader.ReadInt32();
-                    remainingSize -= LengthDekFormat;
-                    if (dekFormatSize <= 0 || dekFormatSize > remainingSize)
-                    {
-                        throw new ArgumentException("invalid ciphertext");
-                    }
-
-                    byte[] dekFormat = reader.ReadBytes(dekFormatSize);
-                    remainingSize -= dekFormatSize;
-                    int encryptedDekSize = reader.ReadInt32();
-                    remainingSize -= LengthDekFormat;
-                    if (encryptedDekSize <= 0 || encryptedDekSize > remainingSize)
-                    {
-                        throw new ArgumentException("invalid ciphertext");
-                    }
-
-                    byte[] encryptedDek = reader.ReadBytes(encryptedDekSize);
-                    remainingSize -= encryptedDekSize;
-                    if (remainingSize != 0)
-                    {
-                        throw new ArgumentException("invalid ciphertext");
-                    }
-
-                    Cryptor cryptor = GetCryptor(Enum.Parse<DekFormat>(Encoding.UTF8.GetString(dekFormat)));
-                    Dek dek = GetDekForDecrypt(
-                        ctx, Encoding.UTF8.GetString(kekId), encryptedDek);
-                    return cryptor.Decrypt(dek.RawDek, ciphertext);
-                }
-            }
-        }
-
-        private Dek GetDekForEncrypt(RuleContext ctx, Cryptor cryptor)
-        {
-            string key = cryptor.DekFormat.ToString();
-            // Cache on rule context to ensure dek lives during life of entire transformation
-            IDictionary<string, Dek> dict = (IDictionary<string, Dek>)
-                ComputeIfAbsent(ctx.CustomData, EncryptMap, () => new Dictionary<string, Dek>());
-            return ComputeIfAbsent(dict, key, () =>
-            {
-                if (!dekEncryptCache.TryGetValue(key, out Dek dek))
-                {
-                    byte[] rawDek = cryptor.GenerateKey();
-                    IKmsClient kmsClient = KmsClients.Get(kekId);
-                    byte[] encryptedDek = kmsClient.Encrypt(rawDek)
-                        .ConfigureAwait(continueOnCapturedContext: false)
-                        .GetAwaiter()
-                        .GetResult();
-                    dek = new Dek(rawDek, encryptedDek);
-                    var options = new MemoryCacheEntryOptions().SetSize(1);
-                    dekEncryptCache.Set(key, dek, options);
-                }
-
-                return dek;
-            });
-        }
-
-        private Dek GetDekForDecrypt(RuleContext ctx, string kekId, byte[] encryptedDek)
-        {
-            ByteArrayKey key = new ByteArrayKey(encryptedDek);
-            // Cache on rule context to ensure dek lives during life of entire transformation
-            IDictionary<ByteArrayKey, Dek> dict = (IDictionary<ByteArrayKey, Dek>)
-                ComputeIfAbsent(ctx.CustomData, DecryptMap, () => new Dictionary<ByteArrayKey, Dek>());
-            return ComputeIfAbsent(dict, key, () =>
-            {
-                if (!dekDecryptCache.TryGetValue(key, out Dek dek))
-                {
-                    IKmsClient kmsClient = KmsClients.Get(kekId);
-                    byte[] rawDek = kmsClient.Decrypt(encryptedDek)
-                        .ConfigureAwait(continueOnCapturedContext: false)
-                        .GetAwaiter()
-                        .GetResult();
-                    dek = new Dek(rawDek, encryptedDek);
-                    var options = new MemoryCacheEntryOptions().SetSize(1);
-                    dekDecryptCache.Set(key, dek, options);
-                }
-
-                return dek;
-            });
-        }
-
-        public TValue ComputeIfAbsent<TKey, TValue>(IDictionary<TKey, TValue> dict, TKey key, Func<TValue> func)
-        {
-            if (!dict.TryGetValue(key, out var val))
-            {
-                val = func.Invoke();
-                dict.Add(key, val);
-            }
-
-            return (TValue)val;
-        }
-
-        private Cryptor GetCryptor(bool isKey)
-        {
-            return GetCryptor(GetKeyFormat(isKey ? keyDeterministic : valueDeterministic));
+            return GetCryptor(dekFormat);
         }
 
         private Cryptor GetCryptor(DekFormat dekFormat)
         {
-            bool exists = cryptors.TryGetValue(dekFormat, out Cryptor value);
-            if (exists)
+            if (Cryptors.TryGetValue(dekFormat, out Cryptor value))
             {
                 return value;
             }
 
             Cryptor cryptor = new Cryptor(dekFormat);
-            cryptors.Add(dekFormat, cryptor);
+            Cryptors.Add(dekFormat, cryptor);
             return cryptor;
         }
 
-        private static byte[] ToBytes(RuleContext.FieldContext fieldCtx, object obj)
+        internal static byte[] ToBytes(RuleContext.Type type, object obj)
         {
-            switch (fieldCtx.Type)
+            switch (type)
             {
                 case RuleContext.Type.Bytes:
                     return (byte[])obj;
@@ -269,9 +90,9 @@ namespace Confluent.SchemaRegistry.Encryption
             }
         }
 
-        private static object ToObject(RuleContext.FieldContext fieldCtx, byte[] bytes)
+        internal static object ToObject(RuleContext.Type type, byte[] bytes)
         {
-            switch (fieldCtx.Type)
+            switch (type)
             {
                 case RuleContext.Type.Bytes:
                     return bytes;
@@ -281,55 +102,415 @@ namespace Confluent.SchemaRegistry.Encryption
                     return null;
             }
         }
-
-        private static String GetHeaderName(RuleContext ctx)
+        
+        public override void Dispose()
         {
-            return HeaderNamePrefix + (ctx.IsKey ? "-key" : "-value");
+            if (Client != null)
+            {
+                Client.Dispose();
+            }
+        }
+    }
+
+    public class FieldEncryptionExecutorTransform : IFieldTransform
+    {
+        
+        public FieldEncryptionExecutor Executor { get; private set; }
+        public Cryptor Cryptor { get; private set; }
+        public string KekName { get; private set; }
+        public RegisteredKek Kek { get; private set; }
+        public int DekExpiryDays { get; private set; }
+
+        public FieldEncryptionExecutorTransform(FieldEncryptionExecutor executor)
+        {
+            Executor = executor;
+        }
+        
+        public void Init(RuleContext ctx)
+        {
+            Cryptor = Executor.GetCryptor(ctx);
+            KekName = GetKekName(ctx);
+            Kek = GetOrCreateKek(ctx);
+            DekExpiryDays = GetDekExpiryDays(ctx);
         }
 
-        public class ByteArrayKey
-        {
-            public byte[] Bytes { get; }
-            private readonly int _hashCode;
+        public bool IsDekRotated() => DekExpiryDays > 0;
 
-            public ByteArrayKey(byte[] bytes)
+        private string GetKekName(RuleContext ctx)
+        {
+            string name = ctx.GetParameter(FieldEncryptionExecutor.EncryptKekName);
+            if (String.IsNullOrEmpty(KekName))
             {
-                Bytes = bytes;
-                _hashCode = GetHashCode(bytes);
+                throw new RuleException("No kek name found");
             }
 
-            public override bool Equals(object obj)
+            return name;
+        }
+        
+        private RegisteredKek GetOrCreateKek(RuleContext ctx)
+        {
+            bool isRead = ctx.RuleMode == RuleMode.Read;
+            KekId kekId = new KekId(KekName, isRead);
+
+            string kmsType = ctx.GetParameter(FieldEncryptionExecutor.EncryptKmsType);
+            string kmsKeyId = ctx.GetParameter(FieldEncryptionExecutor.EncryptKmsKeyid);
+
+            RegisteredKek kek = RetrieveKekFromRegistry(kekId);
+            if (kek == null)
             {
-                if (obj == null)
+                if (isRead)
                 {
-                    return false;
+                    throw new RuleException($"No kek found for name {KekName} during consume");
+                }
+                if (String.IsNullOrEmpty(kmsType))
+                {
+                    throw new RuleException($"No kms type found for {KekName} during produce");
+                }
+                if (String.IsNullOrEmpty(kmsKeyId))
+                {
+                    throw new RuleException($"No kms key id found for {KekName} during produce");
                 }
 
-                var other = (ByteArrayKey)obj;
-                return Bytes.SequenceEqual(other.Bytes);
+                kek = StoreKekToRegistry(kekId, kmsType, kmsKeyId, false);
+                if (kek == null)
+                {
+                    // Handle conflicts (409)
+                    kek = RetrieveKekFromRegistry(kekId);
+                }
+
+                if (kek == null)
+                {
+                    throw new RuleException($"No kek found for {KekName} duringn produce");
+                }
+            }
+            if (!String.IsNullOrEmpty(kmsType) && !kmsType.Equals(kek.KmsType))
+            {
+                throw new RuleException($"Found {KekName} with kms type {kek.KmsType} but expected {kmsType}");
+            }
+            if (!String.IsNullOrEmpty(kmsKeyId) && !kmsKeyId.Equals(kek.KmsKeyId))
+            {
+                throw new RuleException($"Found {KekName} with kms key id {kek.KmsKeyId} but expected {kmsKeyId}");
             }
 
-            public override int GetHashCode()
+            return kek;
+        }
+        
+        private int GetDekExpiryDays(RuleContext ctx)
+        {
+            string expiryDays = ctx.GetParameter(FieldEncryptionExecutor.EncryptDekExpiryDays);
+            if (String.IsNullOrEmpty(expiryDays))
             {
-                return _hashCode;
+                return 0;
+            }
+            if (!Int32.TryParse(expiryDays, out int days))
+            {
+                throw new RuleException($"Invalid expiry days {expiryDays}");
+            }
+            if (days < 0)
+            {
+                throw new RuleException($"Invalid expiry days {expiryDays}");
+            }
+            return days;
+        }
+        
+        private RegisteredKek RetrieveKekFromRegistry(KekId key)
+        {
+            try
+            {
+                return Executor.Client.GetKekAsync(key.Name, !key.LookupDeletedKeks)
+                    .ConfigureAwait(continueOnCapturedContext: false)
+                    .GetAwaiter()
+                    .GetResult();
+            }
+            catch (SchemaRegistryException e)
+            {
+                if (e.Status == HttpStatusCode.NotFound)
+                {
+                    return null;
+                }
+
+                throw new RuleException($"Failed to retrieve kek {key.Name}", e);
+            }
+        }
+        
+        private RegisteredKek StoreKekToRegistry(KekId key, string kmsType, string kmsKeyId, bool shared)
+        {
+            Kek kek = new Kek
+            {
+                Name = key.Name,
+                KmsType = kmsType,
+                KmsKeyId = kmsKeyId,
+                Shared = shared
+            };
+            try
+            {
+                return Executor.Client.CreateKekAsync(kek)
+                    .ConfigureAwait(continueOnCapturedContext: false)
+                    .GetAwaiter()
+                    .GetResult();
+            }
+            catch (SchemaRegistryException e)
+            {
+                if (e.Status == HttpStatusCode.Conflict)
+                {
+                    return null;
+                }
+
+                throw new RuleException($"Failed to create kek {key.Name}", e);
+            }
+        }
+        
+        private RegisteredDek GetOrCreateDek(RuleContext ctx, int? version)
+        {
+            bool isRead = ctx.RuleMode == RuleMode.Read;
+            DekId dekId = new DekId(KekName, ctx.Subject, version, Cryptor.DekFormat, isRead);
+
+            IKmsClient kmsClient = null;
+            RegisteredDek dek = RetrieveDekFromRegistry(dekId);
+            bool isExpired = IsExpired(ctx, dek);
+            if (dek == null || isExpired)
+            {
+                if (isRead)
+                {
+                    throw new RuleException($"No dek found for {KekName} during consume");
+                }
+
+                byte[] encryptedDek = null;
+                if (!Kek.Shared)
+                {
+                    kmsClient = GetKmsClient(Executor.Configs, Kek);
+                    // Generate new dek
+                    byte[] rawDek = Cryptor.GenerateKey();
+                    encryptedDek = kmsClient.Encrypt(rawDek)
+                        .ConfigureAwait(continueOnCapturedContext: false)
+                        .GetAwaiter()
+                        .GetResult();
+                }
+
+                int? newVersion = isExpired ? dek.Version : null;
+                DekId newDekId = new DekId(KekName, ctx.Subject, newVersion, Cryptor.DekFormat, isRead);
+                dek = StoreDekToRegistry(newDekId, encryptedDek);
+                if (dek == null)
+                {
+                    // Handle conflicts (409)
+                    dek = RetrieveDekFromRegistry(dekId);
+                }
+
+                if (dek == null)
+                {
+                    throw new RuleException($"No dek found for {KekName} during produce");
+                }
             }
 
-            private static int GetHashCode([NotNull] byte[] bytes)
+            if (dek.KeyMaterialBytes == null)
             {
-                return bytes.Sum(b => b);
+                if (kmsClient == null)
+                {
+                    kmsClient = GetKmsClient(Executor.Configs, Kek);
+                }
+
+                byte[] rawDek = kmsClient.Decrypt(dek.EncryptedKeyMaterialBytes)
+                    .ConfigureAwait(continueOnCapturedContext: false)
+                    .GetAwaiter()
+                    .GetResult();
+                dek.SetKeyMaterial(rawDek);
+
+            }
+
+            return dek;
+        }
+
+        private bool IsExpired(RuleContext ctx, RegisteredDek dek)
+        {
+            return ctx.RuleMode != RuleMode.Read
+                && DekExpiryDays > 0
+                && dek != null
+                && (DateTimeOffset.Now.ToUnixTimeMilliseconds() - dek.Timestamp) / FieldEncryptionExecutor.MillisInDay > DekExpiryDays;
+        }
+        
+        private RegisteredDek RetrieveDekFromRegistry(DekId key)
+        {
+            try
+            {
+                RegisteredDek dek;
+                if (key.Version != null)
+                {
+                    dek = Executor.Client.GetDekVersionAsync(key.KekName, key.Subject, key.Version.Value, key.DekFormat, !key.LookupDeletedDeks)
+                        .ConfigureAwait(continueOnCapturedContext: false)
+                        .GetAwaiter()
+                        .GetResult();
+                    
+                }
+                else
+                {
+                    dek = Executor.Client.GetDekAsync(key.KekName, key.Subject, key.DekFormat, !key.LookupDeletedDeks)
+                        .ConfigureAwait(continueOnCapturedContext: false)
+                        .GetAwaiter()
+                        .GetResult();
+                }
+
+                if (dek == null)
+                {
+                    return null;
+                }
+
+                return dek.EncryptedKeyMaterial != null ? dek : null;
+            }
+            catch (SchemaRegistryException e)
+            {
+                if (e.Status == HttpStatusCode.NotFound)
+                {
+                    return null;
+                }
+
+                throw new RuleException($"Failed to retrieve dek for kek {key.KekName}, subject {key.Subject}", e);
+            }
+        }
+        
+        private RegisteredDek StoreDekToRegistry(DekId key, byte[] encryptedDek)
+        {
+
+            string encryptedDekStr = encryptedDek != null ? Convert.ToBase64String(encryptedDek) : null;
+            Dek dek = new Dek
+            {
+                Subject = key.Subject,
+                Version = key.Version,
+                Algorithm = key.DekFormat ?? DekFormat.AES256_GCM,
+                EncryptedKeyMaterial = encryptedDekStr
+            };
+            try
+            {
+                return Executor.Client.CreateDekAsync(key.KekName, dek)
+                    .ConfigureAwait(continueOnCapturedContext: false)
+                    .GetAwaiter()
+                    .GetResult();
+            }
+            catch (SchemaRegistryException e)
+            {
+                if (e.Status == HttpStatusCode.Conflict)
+                {
+                    return null;
+                }
+
+                throw new RuleException($"Failed to create dek for kek {key.KekName}, subject {key.Subject}", e);
             }
         }
 
-        public class Dek
+        public object Transform(RuleContext ctx, RuleContext.FieldContext fieldCtx, object fieldValue)
         {
-            public byte[] RawDek { get; }
-            public byte[] EncryptedDek { get; }
-
-            public Dek(byte[] rawDek, byte[] encryptedDek)
+            if (fieldValue == null)
             {
-                RawDek = rawDek;
-                EncryptedDek = encryptedDek;
+                return null;
             }
+
+            RegisteredDek dek;
+            byte[] plaintext;
+            byte[] ciphertext;
+            switch (ctx.RuleMode)
+            {
+                case RuleMode.Write:
+                    plaintext = FieldEncryptionExecutor.ToBytes(fieldCtx.Type, fieldValue);
+                    if (plaintext == null)
+                    {
+                        throw new RuleException($"Type {fieldCtx.Type} not supported for encryption");
+                    }
+
+
+                    dek = GetOrCreateDek(ctx, IsDekRotated() ? FieldEncryptionExecutor.LatestVersion : null);
+                    ciphertext = Cryptor.Encrypt(dek.KeyMaterialBytes, plaintext);
+                    if (!IsDekRotated())
+                    {
+                        ciphertext = PrefixVersion(dek.Version.Value, ciphertext);
+                    }
+
+                    if (fieldCtx.Type == RuleContext.Type.String)
+                    {
+                        return Convert.ToBase64String(ciphertext);
+                    }
+                    else
+                    {
+                        return FieldEncryptionExecutor.ToObject(fieldCtx.Type, ciphertext);
+                    }
+                case RuleMode.Read:
+                    if (fieldCtx.Type == RuleContext.Type.String)
+                    {
+                        ciphertext = Convert.FromBase64String((string)fieldValue);
+                    }
+                    else
+                    {
+                        ciphertext = FieldEncryptionExecutor.ToBytes(fieldCtx.Type, fieldValue);
+                    }
+
+                    if (ciphertext == null)
+                    {
+                        return fieldValue;
+                    }
+
+                    int? version = null;
+                    if (IsDekRotated())
+                    {
+                        (int, byte[]) kv = ExtractVersion(ciphertext);
+                        version = kv.Item1;
+                        ciphertext = kv.Item2;
+                    }
+
+                    dek = GetOrCreateDek(ctx, version);
+                    plaintext = Cryptor.Decrypt(dek.KeyMaterialBytes, ciphertext);
+                    return FieldEncryptionExecutor.ToObject(fieldCtx.Type, plaintext);
+                default:
+                    throw new ArgumentException("Unsupported rule mode " + ctx.RuleMode);
+            }
+        }
+
+        private byte[] PrefixVersion(int version, byte[] ciphertext)
+        {
+            byte[] buffer = new byte[1 + FieldEncryptionExecutor.VersionSize + ciphertext.Length];
+            using (MemoryStream stream = new MemoryStream(buffer))
+            {
+                using (BinaryWriter writer = new BinaryWriter(stream))
+                {
+                    writer.Write(FieldEncryptionExecutor.MagicByte);
+                    writer.Write(version);
+                    writer.Write(ciphertext);
+                    return stream.ToArray();
+                }
+            }
+        }
+
+        private (int, byte[]) ExtractVersion(byte[] ciphertext)
+        {
+            using (MemoryStream stream = new MemoryStream(ciphertext))
+            {
+                using (BinaryReader reader = new BinaryReader(stream))
+                {
+                    int remainingSize = ciphertext.Length;
+                    reader.ReadByte();
+                    remainingSize--;
+                    int version = reader.ReadInt32();
+                    remainingSize -= FieldEncryptionExecutor.VersionSize;
+                    byte[] remaining = reader.ReadBytes(remainingSize);
+                    return (version, remaining);
+                }
+            }
+        }
+        
+        private static IKmsClient GetKmsClient(IEnumerable<KeyValuePair<string, string>> configs, RegisteredKek kek)
+        {
+            string keyUrl = kek.KmsType + FieldEncryptionExecutor.KmsTypeSuffix + kek.KmsKeyId;
+            IKmsClient kmsClient = KmsRegistry.GetKmsClient(keyUrl);
+            if (kmsClient == null)
+            {
+                IKmsDriver kmsDriver = KmsRegistry.GetKmsDriver(keyUrl);
+                kmsClient = kmsDriver.NewKmsClient(
+                    configs.ToDictionary(it => it.Key, it => it.Value), keyUrl);
+                KmsRegistry.RegisterKmsClient(kmsClient);
+            }
+
+            return kmsClient;
+        }
+
+        public void Dispose()
+        {
         }
     }
 }

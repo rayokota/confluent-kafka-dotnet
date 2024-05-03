@@ -24,6 +24,10 @@ using System.Security.Cryptography.X509Certificates;
 
 namespace Confluent.SchemaRegistry.Encryption
 {
+    public record KekId(string Name, bool LookupDeletedKeks);
+    
+    public record DekId(string KekName, string Subject, int? Version, DekFormat? DekFormat, bool LookupDeletedDeks);
+    
     /// <summary>
     ///     A caching DEK Registry client.
     /// </summary>
@@ -39,10 +43,6 @@ namespace Confluent.SchemaRegistry.Encryption
 
         private readonly SemaphoreSlim cacheMutex = new SemaphoreSlim(1);
         
-        private record KekId(string Name, bool IgnoreDeletedKeks);
-        
-        private record DekId(string KekName, string Subject, int? Version, DekFormat? dekFormat, bool IgnoreDeletedKeks);
-
         /// <summary>
         ///     The default timeout value for Schema Registry REST API calls.
         /// </summary>

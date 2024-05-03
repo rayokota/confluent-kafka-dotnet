@@ -31,7 +31,7 @@ namespace Confluent.SchemaRegistry.Serdes
     public static class AvroUtils
     {
         public static object Transform(RuleContext ctx, Avro.Schema schema, object message,
-            FieldTransform fieldTransform)
+            IFieldTransform fieldTransform)
         {
             if (schema == null || message == null)
             {
@@ -119,7 +119,7 @@ namespace Confluent.SchemaRegistry.Serdes
                         intersect.IntersectWith(ctx.Rule.Tags);
                         if (intersect.Count != 0)
                         {
-                            return fieldTransform.Invoke(ctx, fieldContext, message);
+                            return fieldTransform.Transform(ctx, fieldContext, message);
                         }
                     }
 

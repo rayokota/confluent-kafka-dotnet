@@ -43,7 +43,7 @@ namespace Confluent.SchemaRegistry.Encryption
         ///     The encrypted key material.
         /// </summary>
         [DataMember(Name = "encryptedKeyMaterial")]
-        public new string EncryptedKeyMaterial { get; set; }
+        public new string EncryptedKeyMaterial { get; init; }
 
         /// <summary>
         ///     Whether the DEK is deleted.

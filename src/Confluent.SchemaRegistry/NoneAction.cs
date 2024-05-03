@@ -14,6 +14,8 @@
 //
 // Refer to LICENSE for more information.
 
+using System.Collections.Generic;
+
 namespace Confluent.SchemaRegistry
 {
     /// <summary>
@@ -22,6 +24,10 @@ namespace Confluent.SchemaRegistry
     public class NoneAction : IRuleAction
     {
         public static readonly string ActionType = "ERROR";
+        
+        public void Configure(IEnumerable<KeyValuePair<string, string>> config)
+        {
+        }
         
         public string Type()
         {

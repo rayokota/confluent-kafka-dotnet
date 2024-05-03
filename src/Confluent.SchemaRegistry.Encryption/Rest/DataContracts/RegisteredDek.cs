@@ -19,8 +19,12 @@ using System.Runtime.Serialization;
 namespace Confluent.SchemaRegistry.Encryption
 {
     [DataContract]
-    public class RegisteredDek
+    public class RegisteredDek : Dek
     {
+        private string keyMaterial;
+        private byte[] keyMaterialBytes;
+        private byte[] encryptedKeyMaterialBytes;
+        
         /// <summary>
         ///     The KEK name for the DEK.
         /// </summary>
@@ -31,12 +35,52 @@ namespace Confluent.SchemaRegistry.Encryption
         ///     The key material.
         /// </summary>
         [DataMember(Name = "keyMaterial")]
-        public new string KeyMaterial { get; set; }
+        public new string KeyMaterial
+        {
+            get => keyMaterial;
+            init => keyMaterial = value;
+        }
 
         /// <summary>
         ///     The timestamp of the DEK.
         /// </summary>
         [DataMember(Name = "ts")]
         public new long Timestamp { get; set; }
+
+        /// <summary>
+        ///     The encrypted key material bytes.
+        /// </summary>
+        public new byte[] EncryptedKeyMaterialBytes
+        {
+            get
+            {
+                if (encryptedKeyMaterialBytes == null && EncryptedKeyMaterial != null)
+                {
+                    encryptedKeyMaterialBytes = System.Convert.FromBase64String(EncryptedKeyMaterial);
+                }
+
+                return encryptedKeyMaterialBytes;
+            }
+        }
+
+        /// <summary>
+        ///     The key material bytes.
+        /// </summary>
+        public new byte[] KeyMaterialBytes
+        {
+            get
+            {
+                if (keyMaterialBytes == null && KeyMaterial != null)
+                {
+                    keyMaterialBytes = System.Convert.FromBase64String(KeyMaterial);
+                }
+                return keyMaterialBytes;
+            }
+        }
+
+        public void SetKeyMaterial(byte[] keyMaterialBytes)
+        {
+            keyMaterial = keyMaterialBytes != null ? System.Convert.ToBase64String(keyMaterialBytes) : null;
+        }
     }
 }

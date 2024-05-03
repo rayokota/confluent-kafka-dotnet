@@ -45,12 +45,13 @@ namespace Confluent.SchemaRegistry
         
         public IList<Rule> Rules { get; set;}
 
+        public FieldTransformer FieldTransformer { get; set;}
         public IDictionary<object, object> CustomData { get; } = new Dictionary<object, object>();
 
         private Stack<FieldContext> fieldContexts = new Stack<FieldContext>();
 
-        public RuleContext(Schema source, Schema target, string subject, string topic,
-            Headers headers, bool isKey, RuleMode ruleMode, Rule rule, int index, IList<Rule> rules)
+        public RuleContext(Schema source, Schema target, string subject, string topic, Headers headers, bool isKey, 
+            RuleMode ruleMode, Rule rule, int index, IList<Rule> rules, FieldTransformer fieldTransformer)
         {
             Source = source;
             Target = target;
@@ -62,6 +63,7 @@ namespace Confluent.SchemaRegistry
             Rule = rule;
             Index = index;
             Rules = rules;
+            FieldTransformer = fieldTransformer;
         }
 
         public ISet<string> GetTags(string fullName)

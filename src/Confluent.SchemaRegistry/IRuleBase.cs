@@ -15,6 +15,7 @@
 // Refer to LICENSE for more information.
 
 using System;
+using System.Collections.Generic;
 
 namespace Confluent.SchemaRegistry
 {
@@ -23,6 +24,12 @@ namespace Confluent.SchemaRegistry
     /// </summary>
     public interface IRuleBase : IDisposable
     {
+        /// <summary>
+        ///     Configure the rule executor or action
+        /// </summary>
+        /// <param name="config"></param>
+        void Configure(IEnumerable<KeyValuePair<string, string>> config);
+        
         /// <summary>
         ///     The type of rule executor or action
         /// </summary>
