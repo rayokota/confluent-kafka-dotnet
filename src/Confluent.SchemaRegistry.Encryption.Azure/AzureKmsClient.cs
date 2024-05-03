@@ -49,6 +49,7 @@ namespace Confluent.SchemaRegistry.Encryption.Azure
             return result.Plaintext;
         }
         
+        // TODO fix async
         private async Task<CryptographyClient> GetCryptographyClientAsync()
         {
             if (kmsClient == null)

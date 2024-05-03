@@ -1,6 +1,4 @@
 ﻿using System;
-using System.IO;
-using System.Linq;
 using System.Threading.Tasks;
 using Google.Cloud.Kms.V1;
 using Google.Protobuf;
