@@ -51,6 +51,10 @@ namespace Confluent.SchemaRegistry.Serdes
     /// </remarks>
     public class JsonDeserializer<T> : IAsyncDeserializer<T> where T : class
     {
+        private bool useLatestVersion = false;
+        private IDictionary<string, string> useLatestWithMetadata = null;
+        private SubjectNameStrategyDelegate subjectNameStrategy = null;
+        
         private readonly int headerSize =  sizeof(int) + sizeof(byte);
         
         private readonly Dictionary<int, Schema> schemaCache = new Dictionary<int, Schema>();
@@ -75,8 +79,13 @@ namespace Confluent.SchemaRegistry.Serdes
             this(null, config, jsonSchemaGeneratorSettings)
         {
         }
-        
-        public JsonDeserializer(ISchemaRegistryClient schemaRegistryClient, IEnumerable<KeyValuePair<string, string>> config = null, JsonSchemaGeneratorSettings jsonSchemaGeneratorSettings = null)
+
+        public JsonDeserializer(ISchemaRegistryClient schemaRegistryClient, IEnumerable<KeyValuePair<string, string>> config = null, JsonSchemaGeneratorSettings jsonSchemaGeneratorSettings = null) 
+            : this(schemaRegistryClient, config != null ? new JsonDeserializerConfig(config) : null, jsonSchemaGeneratorSettings)
+        {
+        }
+
+        public JsonDeserializer(ISchemaRegistryClient schemaRegistryClient, JsonDeserializerConfig config = null, JsonSchemaGeneratorSettings jsonSchemaGeneratorSettings = null)
         {
             this.schemaRegistryClient = schemaRegistryClient;
             this.jsonSchemaGeneratorSettings = jsonSchemaGeneratorSettings;
@@ -90,6 +99,10 @@ namespace Confluent.SchemaRegistry.Serdes
                 throw new ArgumentException($"JsonDeserializer: unknown configuration parameter {nonJsonConfig.First().Key}.");
             }
 
+            if (config.UseLatestVersion != null) { this.useLatestVersion = config.UseLatestVersion.Value; }
+            if (config.UseLatestWithMetadata != null) { this.useLatestWithMetadata = config.UseLatestWithMetadata; }
+            if (config.SubjectNameStrategy != null) { this.subjectNameStrategy = config.SubjectNameStrategy.Value.ToDelegate(); }
+            
             foreach (IRuleExecutor executor in RuleRegistry.GetRuleExecutors())
             {
                 IEnumerable<KeyValuePair<string, string>> ruleConfigs = config

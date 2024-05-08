@@ -37,9 +37,18 @@ namespace Confluent.SchemaRegistry.Serdes
     /// </remarks>
     public class AvroDeserializer<T> : IAsyncDeserializer<T>
     {
+        private bool useLatestVersion = false;
+        private IDictionary<string, string> useLatestWithMetadata = null;
+        private SubjectNameStrategyDelegate subjectNameStrategy = null;
+        
         private IAvroDeserializerImpl<T> deserializerImpl;
 
         private ISchemaRegistryClient schemaRegistryClient;
+
+        public AvroDeserializer(ISchemaRegistryClient schemaRegistryClient)
+            : this(schemaRegistryClient, null)
+        {
+        }
 
         /// <summary>
         ///     Initialize a new AvroDeserializer instance.
@@ -52,7 +61,12 @@ namespace Confluent.SchemaRegistry.Serdes
         ///     Deserializer configuration properties (refer to 
         ///     <see cref="AvroDeserializerConfig" />).
         /// </param>
-        public AvroDeserializer(ISchemaRegistryClient schemaRegistryClient, IEnumerable<KeyValuePair<string, string>> config = null)
+        public AvroDeserializer(ISchemaRegistryClient schemaRegistryClient, IEnumerable<KeyValuePair<string, string>> config = null) 
+            : this(schemaRegistryClient, config != null ? new AvroDeserializerConfig(config) : null)
+        {
+        }
+
+        public AvroDeserializer(ISchemaRegistryClient schemaRegistryClient, AvroDeserializerConfig config = null)
         {
             this.schemaRegistryClient = schemaRegistryClient;
             
@@ -67,11 +81,20 @@ namespace Confluent.SchemaRegistry.Serdes
 
             var avroConfig = config
                 .Where(item => item.Key.StartsWith("avro.") && !item.Key.StartsWith("rules."));
-            if (avroConfig.Count() != 0)
+            foreach (var property in avroConfig)
             {
-                throw new ArgumentException($"AvroDeserializer: unknown configuration parameter {avroConfig.First().Key}");
+                if (property.Key != AvroDeserializerConfig.PropertyNames.UseLatestVersion &&
+                    property.Key != AvroDeserializerConfig.PropertyNames.UseLatestWithMetadata &&
+                    property.Key != AvroSerializerConfig.PropertyNames.SubjectNameStrategy)
+                {
+                    throw new ArgumentException($"AvroDeserializer: unknown configuration parameter {property.Key}");
+                }
             }
 
+            if (config.UseLatestVersion != null) { this.useLatestVersion = config.UseLatestVersion.Value; }
+            if (config.UseLatestWithMetadata != null) { this.useLatestWithMetadata = config.UseLatestWithMetadata; }
+            if (config.SubjectNameStrategy != null) { this.subjectNameStrategy = config.SubjectNameStrategy.Value.ToDelegate(); }
+            
             foreach (IRuleExecutor executor in RuleRegistry.GetRuleExecutors())
             {
                 IEnumerable<KeyValuePair<string, string>> ruleConfigs = config
@@ -118,8 +141,8 @@ namespace Confluent.SchemaRegistry.Serdes
                 if (deserializerImpl == null)
                 {
                     deserializerImpl = (typeof(T) == typeof(GenericRecord))
-                        ? (IAvroDeserializerImpl<T>)new GenericDeserializerImpl(schemaRegistryClient)
-                        : new SpecificDeserializerImpl<T>(schemaRegistryClient);
+                        ? (IAvroDeserializerImpl<T>)new GenericDeserializerImpl(schemaRegistryClient, useLatestVersion, useLatestWithMetadata, subjectNameStrategy)
+                        : new SpecificDeserializerImpl<T>(schemaRegistryClient, useLatestVersion, useLatestWithMetadata, subjectNameStrategy);
                 }
 
                 // TODO: change this interface such that it takes ReadOnlyMemory<byte>, not byte[].

@@ -57,6 +57,7 @@ namespace Confluent.SchemaRegistry.Serdes
         private bool autoRegisterSchema = true;
         private bool normalizeSchemas = false;
         private bool useLatestVersion = false;
+        private IDictionary<string, string> useLatestWithMetadata = null;
         private bool skipKnownTypes = false;
         private bool useDeprecatedFormat = false;
         private int initialBufferSize = DefaultInitialBufferSize;
@@ -100,6 +101,7 @@ namespace Confluent.SchemaRegistry.Serdes
             if (config.AutoRegisterSchemas != null) { this.autoRegisterSchema = config.AutoRegisterSchemas.Value; }
             if (config.NormalizeSchemas != null) { this.normalizeSchemas = config.NormalizeSchemas.Value; }
             if (config.UseLatestVersion != null) { this.useLatestVersion = config.UseLatestVersion.Value; }
+            if (config.UseLatestWithMetadata != null) { this.useLatestWithMetadata = config.UseLatestWithMetadata; }
             if (config.SkipKnownTypes != null) { this.skipKnownTypes = config.SkipKnownTypes.Value; }
             if (config.UseDeprecatedFormat != null) { this.useDeprecatedFormat = config.UseDeprecatedFormat.Value; }
             if (config.SubjectNameStrategy != null) { this.subjectNameStrategy = config.SubjectNameStrategy.Value.ToDelegate(); }

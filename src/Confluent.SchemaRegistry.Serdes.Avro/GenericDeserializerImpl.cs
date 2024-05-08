@@ -39,10 +39,20 @@ namespace Confluent.SchemaRegistry.Serdes
         private SemaphoreSlim deserializeMutex = new SemaphoreSlim(1);
 
         private ISchemaRegistryClient schemaRegistryClient;
+        private bool useLatestVersion;
+        private IDictionary<string, string> useLatestWithMetadata;
+        private SubjectNameStrategyDelegate subjectNameStrategy;
 
-        public GenericDeserializerImpl(ISchemaRegistryClient schemaRegistryClient)
+        public GenericDeserializerImpl(
+            ISchemaRegistryClient schemaRegistryClient, 
+            bool useLatestVersion, 
+            IDictionary<string, string> useLatestWithMetadata, 
+            SubjectNameStrategyDelegate subjectNameStrategy)
         {
             this.schemaRegistryClient = schemaRegistryClient;
+            this.useLatestVersion = useLatestVersion;
+            this.useLatestWithMetadata = useLatestWithMetadata;
+            this.subjectNameStrategy = subjectNameStrategy;
         }
 
         public async Task<GenericRecord> Deserialize(string topic, Headers headers, byte[] array, bool isKey)

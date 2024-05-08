@@ -15,6 +15,7 @@
 // Refer to LICENSE for more information.
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
@@ -46,10 +47,20 @@ namespace Confluent.SchemaRegistry.Serdes
         public global::Avro.Schema ReaderSchema { get; private set; }
 
         private ISchemaRegistryClient schemaRegistryClient;
+        private bool useLatestVersion;
+        private IDictionary<string, string> useLatestWithMetadata;
+        private SubjectNameStrategyDelegate subjectNameStrategy;
 
-        public SpecificDeserializerImpl(ISchemaRegistryClient schemaRegistryClient)
+        public SpecificDeserializerImpl(
+            ISchemaRegistryClient schemaRegistryClient,
+            bool useLatestVersion,
+            IDictionary<string, string> useLatestWithMetadata,
+            SubjectNameStrategyDelegate subjectNameStrategy)
         {
             this.schemaRegistryClient = schemaRegistryClient;
+            this.useLatestVersion = useLatestVersion;
+            this.useLatestWithMetadata = useLatestWithMetadata;
+            this.subjectNameStrategy = subjectNameStrategy;
 
             if (typeof(ISpecificRecord).IsAssignableFrom(typeof(T)))
             {
@@ -101,6 +112,16 @@ namespace Confluent.SchemaRegistry.Serdes
         {
             try
             {
+                string subject = this.subjectNameStrategy != null
+                    // use the subject name strategy specified in the serializer config if available.
+                    ? this.subjectNameStrategy(
+                        new SerializationContext(isKey ? MessageComponentType.Key : MessageComponentType.Value, topic),
+                        null)
+                    // else fall back to the deprecated config from (or default as currently supplied by) SchemaRegistry.
+                    : isKey
+                        ? schemaRegistryClient.ConstructKeySubjectName(topic)
+                        : schemaRegistryClient.ConstructValueSubjectName(topic);
+                
                 // Note: topic is not necessary for deserialization (or knowing if it's a key 
                 // or value) only the schema id is needed.
 
@@ -165,8 +186,6 @@ namespace Confluent.SchemaRegistry.Serdes
                             var schema = Avro.Schema.Parse(ctx.Target.SchemaString);
                             return AvroUtils.Transform(ctx, schema, message, transform);
                         };
-                        // TODO fix
-                        string subject = "topic-value";
                         data = (T) SerdeUtils.ExecuteRules(isKey, subject, topic, headers, RuleMode.Read, null,
                             writerSchemaJson, data, fieldTransformer);
                     }

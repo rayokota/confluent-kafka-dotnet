@@ -84,6 +84,7 @@ namespace Confluent.SchemaRegistry.Serdes
         private bool autoRegisterSchema;
         private bool normalizeSchemas;
         private bool useLatestVersion;
+        private IDictionary<string, string> useLatestWithMetadata;
         private int initialBufferSize;
         private SubjectNameStrategyDelegate subjectNameStrategy;
 
@@ -99,6 +100,7 @@ namespace Confluent.SchemaRegistry.Serdes
             bool autoRegisterSchema,
             bool normalizeSchemas,
             bool useLatestVersion,
+            IDictionary<string, string> useLatestWithMetadata,
             int initialBufferSize,
             SubjectNameStrategyDelegate subjectNameStrategy)
         {
@@ -106,6 +108,7 @@ namespace Confluent.SchemaRegistry.Serdes
             this.autoRegisterSchema = autoRegisterSchema;
             this.normalizeSchemas = normalizeSchemas;
             this.useLatestVersion = useLatestVersion;
+            this.useLatestWithMetadata = useLatestWithMetadata;
             this.initialBufferSize = initialBufferSize;
             this.subjectNameStrategy = subjectNameStrategy;
 

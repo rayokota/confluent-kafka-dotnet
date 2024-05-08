@@ -37,20 +37,19 @@ namespace Confluent.SchemaRegistry.Encryption.Azure
         
         public async Task<byte[]> Encrypt(byte[] plaintext)
         {
-            var client = await GetCryptographyClientAsync();
+            var client = GetCryptographyClient();
             var result = await client.EncryptAsync(EncryptionAlgorithm.RsaOaep, plaintext);
             return result.Ciphertext;
         }
 
         public async Task<byte[]> Decrypt(byte[] ciphertext)
         {
-            var client = await GetCryptographyClientAsync();
+            var client = GetCryptographyClient();
             var result = await client.DecryptAsync(EncryptionAlgorithm.RsaOaep, ciphertext);
             return result.Plaintext;
         }
         
-        // TODO fix async
-        private async Task<CryptographyClient> GetCryptographyClientAsync()
+        private CryptographyClient GetCryptographyClient()
         {
             if (kmsClient == null)
             {

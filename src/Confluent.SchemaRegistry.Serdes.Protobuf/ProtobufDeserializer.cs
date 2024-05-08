@@ -48,6 +48,10 @@ namespace Confluent.SchemaRegistry.Serdes
     /// </remarks>
     public class ProtobufDeserializer<T> : IAsyncDeserializer<T> where T : class, IMessage<T>, new()
     {
+        private bool useLatestVersion = false;
+        private IDictionary<string, string> useLatestWithMetadata = null;
+        private SubjectNameStrategyDelegate subjectNameStrategy = null;
+        
         private readonly Dictionary<int, Schema> schemaCache = new Dictionary<int, Schema>();
         
         private SemaphoreSlim deserializeMutex = new SemaphoreSlim(1);
@@ -68,8 +72,13 @@ namespace Confluent.SchemaRegistry.Serdes
         public ProtobufDeserializer(IEnumerable<KeyValuePair<string, string>> config = null) : this(null, config)
         {
         }
-        
-        public ProtobufDeserializer(ISchemaRegistryClient schemaRegistryClient, IEnumerable<KeyValuePair<string, string>> config = null)
+
+        public ProtobufDeserializer(ISchemaRegistryClient schemaRegistryClient, IEnumerable<KeyValuePair<string, string>> config = null) 
+            : this(schemaRegistryClient, config != null ? new ProtobufDeserializerConfig(config) : null)
+        {
+        }
+
+        public ProtobufDeserializer(ISchemaRegistryClient schemaRegistryClient, ProtobufDeserializerConfig config = null)
         {
             this.schemaRegistryClient = schemaRegistryClient;
 
@@ -90,6 +99,10 @@ namespace Confluent.SchemaRegistry.Serdes
                 this.useDeprecatedFormat = protobufConfig.UseDeprecatedFormat.Value;
             }
 
+            if (config.UseLatestVersion != null) { this.useLatestVersion = config.UseLatestVersion.Value; }
+            if (config.UseLatestWithMetadata != null) { this.useLatestWithMetadata = config.UseLatestWithMetadata; }
+            if (config.SubjectNameStrategy != null) { this.subjectNameStrategy = config.SubjectNameStrategy.Value.ToDelegate(); }
+            
             foreach (IRuleExecutor executor in RuleRegistry.GetRuleExecutors())
             {
                 IEnumerable<KeyValuePair<string, string>> ruleConfigs = config

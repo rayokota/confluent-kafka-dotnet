@@ -40,6 +40,7 @@ namespace Confluent.SchemaRegistry.Serdes
         private bool autoRegisterSchema = true;
         private bool normalizeSchemas = false;
         private bool useLatestVersion = false;
+        private IDictionary<string, string> useLatestWithMetadata = null;
         private int initialBufferSize = DefaultInitialBufferSize;
         private SubjectNameStrategyDelegate subjectNameStrategy = null;
 
@@ -105,6 +106,7 @@ namespace Confluent.SchemaRegistry.Serdes
             {
                 if (property.Key != AvroSerializerConfig.PropertyNames.AutoRegisterSchemas &&
                     property.Key != AvroSerializerConfig.PropertyNames.UseLatestVersion &&
+                    property.Key != AvroSerializerConfig.PropertyNames.UseLatestWithMetadata &&
                     property.Key != AvroSerializerConfig.PropertyNames.BufferBytes &&
                     property.Key != AvroSerializerConfig.PropertyNames.SubjectNameStrategy)
                 {
@@ -116,6 +118,7 @@ namespace Confluent.SchemaRegistry.Serdes
             if (config.AutoRegisterSchemas != null) { this.autoRegisterSchema = config.AutoRegisterSchemas.Value; }
             if (config.NormalizeSchemas != null) { this.normalizeSchemas = config.NormalizeSchemas.Value; }
             if (config.UseLatestVersion != null) { this.useLatestVersion = config.UseLatestVersion.Value; }
+            if (config.UseLatestWithMetadata != null) { this.useLatestWithMetadata = config.UseLatestWithMetadata; }
             if (config.SubjectNameStrategy != null) { this.subjectNameStrategy = config.SubjectNameStrategy.Value.ToDelegate(); }
 
             if (this.useLatestVersion && this.autoRegisterSchema)
@@ -165,8 +168,8 @@ namespace Confluent.SchemaRegistry.Serdes
                 if (serializerImpl == null)
                 {
                     serializerImpl = typeof(T) == typeof(GenericRecord)
-                        ? (IAvroSerializerImpl<T>)new GenericSerializerImpl(schemaRegistryClient, autoRegisterSchema, normalizeSchemas, useLatestVersion, initialBufferSize, subjectNameStrategy)
-                        : new SpecificSerializerImpl<T>(schemaRegistryClient, autoRegisterSchema, normalizeSchemas, useLatestVersion, initialBufferSize, subjectNameStrategy);
+                        ? (IAvroSerializerImpl<T>)new GenericSerializerImpl(schemaRegistryClient, autoRegisterSchema, normalizeSchemas, useLatestVersion, useLatestWithMetadata, initialBufferSize, subjectNameStrategy)
+                        : new SpecificSerializerImpl<T>(schemaRegistryClient, autoRegisterSchema, normalizeSchemas, useLatestVersion, useLatestWithMetadata, initialBufferSize, subjectNameStrategy);
                 }
 
                 return await serializerImpl.Serialize(context.Topic, context.Headers, value, context.Component == MessageComponentType.Key).ConfigureAwait(continueOnCapturedContext: false);

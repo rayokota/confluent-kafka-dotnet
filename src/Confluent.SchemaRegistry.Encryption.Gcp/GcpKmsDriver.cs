@@ -25,7 +25,7 @@ namespace Confluent.SchemaRegistry.Encryption.Gcp
         public IKmsClient NewKmsClient(IDictionary<string, string> config, string keyUrl)
         {
             // TODO env vars
-                // TODO params
+            // TODO use params
             if (config.TryGetValue(AccountType, out string accountType) 
                 && config.TryGetValue(ClientId, out string clientId)
                 && config.TryGetValue(ClientEmail, out string clientEmail)
