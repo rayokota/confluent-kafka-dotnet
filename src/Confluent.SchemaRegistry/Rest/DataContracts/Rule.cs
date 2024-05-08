@@ -61,13 +61,15 @@ namespace Confluent.SchemaRegistry
         /// </summary>
         private Rule() { }
 
-        public Rule(string name, RuleKind kind, RuleMode mode, string type, ISet<string> tags)
+        public Rule(string name, RuleKind kind, RuleMode mode, string type, ISet<string> tags,
+            IDictionary<string, string> parameters)
         {
             Name = name;
             Kind = kind;
             Mode = mode;
             Type = type;
             Tags = tags;
+            Params = parameters;
         }
         
         public Rule(string name, RuleKind kind, RuleMode mode, string type, ISet<string> tags, 

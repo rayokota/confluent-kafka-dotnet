@@ -83,9 +83,19 @@ namespace Confluent.SchemaRegistry.Serdes
 
             if (config == null) { return; }
 
-            if (config.Count() > 0)
+            var nonJsonConfig = config
+                .Where(item => !item.Key.StartsWith("json.") && !item.Key.StartsWith("rules."));
+            if (nonJsonConfig.Count() > 0)
             {
-                throw new ArgumentException($"JsonDeserializer: unknown configuration parameter {config.First().Key}.");
+                throw new ArgumentException($"JsonDeserializer: unknown configuration parameter {nonJsonConfig.First().Key}.");
+            }
+
+            foreach (IRuleExecutor executor in RuleRegistry.GetRuleExecutors())
+            {
+                IEnumerable<KeyValuePair<string, string>> ruleConfigs = config
+                    .Select(kv => new KeyValuePair<string, string>(
+                        kv.Key.StartsWith("rules.") ? kv.Key.Substring("rules.".Length) : kv.Key, kv.Value));
+                executor.Configure(ruleConfigs); 
             }
         }
 

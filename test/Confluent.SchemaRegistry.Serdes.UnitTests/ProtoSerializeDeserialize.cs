@@ -146,13 +146,19 @@ namespace Confluent.SchemaRegistry.Serdes.UnitTests
                 }, new Dictionary<string, string>(), new HashSet<string>()
             );
             schema.RuleSet = new RuleSet(new List<Rule>(),
-                new List<Rule> 
+                new List<Rule>
                 {
                     new Rule("encryptPII", RuleKind.Transform, RuleMode.WriteRead, "ENCRYPT", new HashSet<string>
                     {
                         "PII"
+                    }, new Dictionary<string, string>
+                    {
+                        ["encrypt.kek.name"] = "kek1",
+                        ["encrypt.kms.type"] = "local-kms",
+                        ["encrypt.kms.key.id"] = "mykey"
                     })
-                });
+                }
+            );
             store[schemaStr] = 1;
             subjectStore["topic-value"] = schema; 
             var config = new ProtobufSerializerConfig
@@ -160,9 +166,9 @@ namespace Confluent.SchemaRegistry.Serdes.UnitTests
                 AutoRegisterSchemas = false,
                 UseLatestVersion = true
             };
-            LocalKmsDriver executor = new LocalKmsDriver("mysecret");
-            var serializer = new ProtobufSerializer<Person>(schemaRegistryClient, config, new List<IRuleExecutor> { executor });
-            var deserializer = new ProtobufDeserializer<Person>(schemaRegistryClient, null, new List<IRuleExecutor> { executor });
+            config.Set("secret", "mysecret");
+            var serializer = new ProtobufSerializer<Person>(schemaRegistryClient, config);
+            var deserializer = new ProtobufDeserializer<Person>(schemaRegistryClient, null);
 
             var user = new Person
             {

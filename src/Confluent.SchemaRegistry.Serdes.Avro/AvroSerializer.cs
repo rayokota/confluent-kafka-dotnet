@@ -92,13 +92,15 @@ namespace Confluent.SchemaRegistry.Serdes
 
             if (config == null) { return; }
 
-            var nonAvroConfig = config.Where(item => !item.Key.StartsWith("avro."));
+            var nonAvroConfig = config
+                .Where(item => !item.Key.StartsWith("avro.") && !item.Key.StartsWith("rules."));
             if (nonAvroConfig.Count() > 0)
             {
                 throw new ArgumentException($"AvroSerializer: unknown configuration parameter {nonAvroConfig.First().Key}");
             }
 
-            var avroConfig = config.Where(item => item.Key.StartsWith("avro."));
+            var avroConfig = config
+                .Where(item => item.Key.StartsWith("avro.") && !item.Key.StartsWith("rules."));
             foreach (var property in avroConfig)
             {
                 if (property.Key != AvroSerializerConfig.PropertyNames.AutoRegisterSchemas &&
@@ -119,6 +121,14 @@ namespace Confluent.SchemaRegistry.Serdes
             if (this.useLatestVersion && this.autoRegisterSchema)
             {
                 throw new ArgumentException($"AvroSerializer: cannot enable both use.latest.version and auto.register.schemas");
+            }
+
+            foreach (IRuleExecutor executor in RuleRegistry.GetRuleExecutors())
+            {
+                IEnumerable<KeyValuePair<string, string>> ruleConfigs = config
+                    .Select(kv => new KeyValuePair<string, string>(
+                        kv.Key.StartsWith("rules.") ? kv.Key.Substring("rules.".Length) : kv.Key, kv.Value));
+                executor.Configure(ruleConfigs); 
             }
         }
 

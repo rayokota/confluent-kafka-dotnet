@@ -20,7 +20,7 @@ using System.Threading;
 namespace Confluent.SchemaRegistry.Encryption
 {
     /// <summary>
-    ///     A KMS driver registry.
+    ///     A KMS driver and client registry.
     /// </summary>
     public static class KmsRegistry
     {

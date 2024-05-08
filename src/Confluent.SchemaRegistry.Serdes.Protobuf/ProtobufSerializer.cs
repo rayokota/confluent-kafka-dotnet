@@ -89,7 +89,8 @@ namespace Confluent.SchemaRegistry.Serdes
                 return;
             }
 
-            var nonProtobufConfig = config.Where(item => !item.Key.StartsWith("protobuf."));
+            var nonProtobufConfig = config
+                .Where(item => !item.Key.StartsWith("protobuf.") && !item.Key.StartsWith("rules."));
             if (nonProtobufConfig.Count() > 0)
             {
                 throw new ArgumentException($"ProtobufSerializer: unknown configuration parameter {nonProtobufConfig.First().Key}");
@@ -109,6 +110,14 @@ namespace Confluent.SchemaRegistry.Serdes
             if (this.useLatestVersion && this.autoRegisterSchema)
             {
                 throw new ArgumentException($"ProtobufSerializer: cannot enable both use.latest.version and auto.register.schemas");
+            }
+
+            foreach (IRuleExecutor executor in RuleRegistry.GetRuleExecutors())
+            {
+                IEnumerable<KeyValuePair<string, string>> ruleConfigs = config
+                    .Select(kv => new KeyValuePair<string, string>(
+                        kv.Key.StartsWith("rules.") ? kv.Key.Substring("rules.".Length) : kv.Key, kv.Value));
+                executor.Configure(ruleConfigs); 
             }
         }
 

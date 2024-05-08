@@ -20,9 +20,4 @@ namespace System.Runtime.CompilerServices
 {
     [EditorBrowsable(EditorBrowsableState.Never)]
     internal static class IsExternalInit { }
-    
-    [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
-    public sealed class ModuleInitializerAttribute : Attribute
-    {
-    }
 }

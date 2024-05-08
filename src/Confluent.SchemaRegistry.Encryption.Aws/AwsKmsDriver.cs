@@ -1,17 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 
 namespace Confluent.SchemaRegistry.Encryption.Aws
 {
     public class AwsKmsDriver : IKmsDriver
     {
-        [ModuleInitializer]
-        internal static void Register()
+        public static void Register()
         {
             KmsRegistry.RegisterKmsDriver(new AwsKmsDriver());
         }
-    
+
         public static readonly string Prefix = "aws-kms://";
         public static readonly string AccessKeyId = "access.key.id";
         public static readonly string SecretAccessKey = "secret.access.key";

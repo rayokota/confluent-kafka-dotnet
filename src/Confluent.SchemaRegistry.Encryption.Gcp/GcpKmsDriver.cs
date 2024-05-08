@@ -1,13 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 
 namespace Confluent.SchemaRegistry.Encryption.Gcp
 {
     public class GcpKmsDriver : IKmsDriver
     {
-        [ModuleInitializer]
-        internal static void Register()
+        public static void Register()
         {
             KmsRegistry.RegisterKmsDriver(new GcpKmsDriver());
         }

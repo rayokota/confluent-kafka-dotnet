@@ -27,19 +27,18 @@ using Confluent.Kafka.Examples.AvroSpecific;
 using System;
 using Avro.Generic;
 using Confluent.SchemaRegistry.Encryption;
-using Confluent.SchemaRegistry.Encryption.Aws;
-using Confluent.SchemaRegistry.Encryption.Azure;
-using Confluent.SchemaRegistry.Encryption.Gcp;
-using Confluent.SchemaRegistry.Encryption.HcVault;
 
 namespace Confluent.SchemaRegistry.Serdes.UnitTests
 {
     public class SerializeDeserialzeTests
     {
         private ISchemaRegistryClient schemaRegistryClient;
+        private IDekRegistryClient dekRegistryClient;
         private string testTopic;
-        private Dictionary<string, int> store = new Dictionary<string, int>();
-        private Dictionary<string, RegisteredSchema> subjectStore = new Dictionary<string, RegisteredSchema>();
+        private IDictionary<string, int> store = new Dictionary<string, int>();
+        private IDictionary<string, RegisteredSchema> subjectStore = new Dictionary<string, RegisteredSchema>();
+        private IDictionary<KekId, RegisteredKek> kekStore = new Dictionary<KekId, RegisteredKek>();
+        private IDictionary<DekId, RegisteredDek> dekStore = new Dictionary<DekId, RegisteredDek>();
 
         public SerializeDeserialzeTests()
         {
@@ -67,6 +66,66 @@ namespace Confluent.SchemaRegistry.Serdes.UnitTests
                 (string subject) => subjectStore[subject]
             );
             schemaRegistryClient = schemaRegistryMock.Object;
+            var dekRegistryMock = new Mock<IDekRegistryClient>();
+            dekRegistryMock.Setup(x => x.CreateKekAsync(It.IsAny<Kek>())).ReturnsAsync(
+                (Kek kek) =>
+                {
+                    var kekId = new KekId(kek.Name, false);
+                    return kekStore.TryGetValue(kekId, out RegisteredKek registeredKek)
+                        ? registeredKek
+                        : kekStore[kekId] = new RegisteredKek
+                        {
+                            Name = kek.Name,
+                            KmsType = kek.KmsType,
+                            KmsKeyId = kek.KmsKeyId,
+                            KmsProps = kek.KmsProps,
+                            Doc = kek.Doc,
+                            Shared = kek.Shared,
+                            Deleted = false,
+                            Timestamp = DateTimeOffset.Now.ToUnixTimeMilliseconds()
+                        };
+                });
+            dekRegistryMock.Setup(x => x.GetKekAsync(It.IsAny<string>(), It.IsAny<bool>())).ReturnsAsync(
+                (string name, bool ignoreDeletedKeks) =>
+                {
+                    var kekId = new KekId(name, false);
+                    return kekStore.TryGetValue(kekId, out RegisteredKek registeredKek) ? registeredKek : null;
+                });
+            dekRegistryMock.Setup(x => x.CreateDekAsync(It.IsAny<string>(), It.IsAny<Dek>())).ReturnsAsync(
+                (string kekName, Dek dek) =>
+                {
+                    int version = dek.Version ?? 1;
+                    var dekId = new DekId(kekName, dek.Subject, version, dek.Algorithm, false);
+                    return dekStore.TryGetValue(dekId, out RegisteredDek registeredDek)
+                        ? registeredDek
+                        : dekStore[dekId] = new RegisteredDek
+                        {
+                            KekName = kekName,
+                            Subject = dek.Subject,
+                            Version = version,
+                            Algorithm = dek.Algorithm,
+                            EncryptedKeyMaterial = dek.EncryptedKeyMaterial,
+                            Deleted = false,
+                            Timestamp = DateTimeOffset.Now.ToUnixTimeMilliseconds()
+                        };
+                });
+            dekRegistryMock.Setup(x => x.GetDekAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DekFormat>(), It.IsAny<bool>())).ReturnsAsync(
+                (string kekName, string subject, DekFormat? algorithm, bool ignoreDeletedKeks) =>
+                {
+                    var dekId = new DekId(kekName, subject, 1, algorithm, false);
+                    return dekStore.TryGetValue(dekId, out RegisteredDek registeredDek) ? registeredDek : null;
+                });
+            dekRegistryMock.Setup(x => x.GetDekVersionAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<DekFormat>(), It.IsAny<bool>())).ReturnsAsync(
+                (string kekName, string subject, int version, DekFormat? algorithm, bool ignoreDeletedKeks) =>
+                {
+                    var dekId = new DekId(kekName, subject, version, algorithm, false);
+                    return dekStore.TryGetValue(dekId, out RegisteredDek registeredDek) ? registeredDek : null;
+                });
+            dekRegistryClient = dekRegistryMock.Object;
+            
+            // Register rule executors and kms drivers
+            FieldEncryptionExecutor.Register(dekRegistryClient);
+            LocalKmsDriver.Register();
         }
 
         [Fact]
@@ -185,13 +244,19 @@ namespace Confluent.SchemaRegistry.Serdes.UnitTests
                 }, new Dictionary<string, string>(), new HashSet<string>()
             );
             schema.RuleSet = new RuleSet(new List<Rule>(),
-                new List<Rule> 
+                new List<Rule>
                 {
                     new Rule("encryptPII", RuleKind.Transform, RuleMode.WriteRead, "ENCRYPT", new HashSet<string>
                     {
                         "PII"
+                    }, new Dictionary<string, string>
+                    {
+                        ["encrypt.kek.name"] = "kek1",
+                        ["encrypt.kms.type"] = "local-kms",
+                        ["encrypt.kms.key.id"] = "mykey"
                     })
-                });
+                }
+            );
             store[schemaStr] = 1;
             subjectStore["topic-value"] = schema; 
             var config = new AvroSerializerConfig
@@ -199,9 +264,9 @@ namespace Confluent.SchemaRegistry.Serdes.UnitTests
                 AutoRegisterSchemas = false,
                 UseLatestVersion = true
             };
-            LocalKmsDriver executor = new LocalKmsDriver("mysecret");
-            var serializer = new AvroSerializer<User>(schemaRegistryClient, config, new List<IRuleExecutor> { executor });
-            var deserializer = new AvroDeserializer<User>(schemaRegistryClient, null, new List<IRuleExecutor> { executor });
+            config.Set("rules.secret", "mysecret");
+            var serializer = new AvroSerializer<User>(schemaRegistryClient, config);
+            var deserializer = new AvroDeserializer<User>(schemaRegistryClient, null);
 
             var user = new User
             {

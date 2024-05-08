@@ -77,7 +77,8 @@ namespace Confluent.SchemaRegistry.Serdes
 
             if (config == null) { return; }
 
-            var nonProtobufConfig = config.Where(item => !item.Key.StartsWith("protobuf."));
+            var nonProtobufConfig = config
+                .Where(item => !item.Key.StartsWith("protobuf.") && !item.Key.StartsWith("rules."));
             if (nonProtobufConfig.Count() > 0)
             {
                 throw new ArgumentException($"ProtobufDeserializer: unknown configuration parameter {nonProtobufConfig.First().Key}");
@@ -87,6 +88,14 @@ namespace Confluent.SchemaRegistry.Serdes
             if (protobufConfig.UseDeprecatedFormat != null)
             {
                 this.useDeprecatedFormat = protobufConfig.UseDeprecatedFormat.Value;
+            }
+
+            foreach (IRuleExecutor executor in RuleRegistry.GetRuleExecutors())
+            {
+                IEnumerable<KeyValuePair<string, string>> ruleConfigs = config
+                    .Select(kv => new KeyValuePair<string, string>(
+                        kv.Key.StartsWith("rules.") ? kv.Key.Substring("rules.".Length) : kv.Key, kv.Value));
+                executor.Configure(ruleConfigs); 
             }
         }
 

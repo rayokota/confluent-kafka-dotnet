@@ -4,16 +4,19 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Text;
-using System.Runtime.CompilerServices;
 
 namespace Confluent.SchemaRegistry.Encryption
 {
     public class FieldEncryptionExecutor : FieldRuleExecutor
     {
-        [ModuleInitializer]
-        internal static void Register()
+        public static void Register()
         {
-            RuleRegistry.RegisterRuleExecutor(RuleType, new FieldEncryptionExecutor());
+            Register(null);
+        }
+
+        public static void Register(IDekRegistryClient client)
+        {
+            RuleRegistry.RegisterRuleExecutor(RuleType, new FieldEncryptionExecutor(client));
         }
 
         public static readonly string RuleType = "ENCRYPT";
@@ -39,10 +42,18 @@ namespace Confluent.SchemaRegistry.Encryption
         {
         }
         
+        public FieldEncryptionExecutor(IDekRegistryClient client)
+        {
+            Client = client;
+        }
+        
         public override void Configure(IEnumerable<KeyValuePair<string, string>> config)
         {
             Configs = config;
-            Client = new CachedDekRegistryClient(Configs);
+            if (Client == null)
+            {
+                Client = new CachedDekRegistryClient(Configs);
+            }
             Cryptors = new Dictionary<DekFormat, Cryptor>();
         }
 
@@ -58,7 +69,7 @@ namespace Confluent.SchemaRegistry.Encryption
         internal Cryptor GetCryptor(RuleContext ctx)
         {
             string algorithm = ctx.GetParameter(EncryptDekAlgorithm);
-            if (!Enum.TryParse<>(algorithm, out DekFormat dekFormat))
+            if (!Enum.TryParse<DekFormat>(algorithm, out DekFormat dekFormat))
             {
                 dekFormat = DekFormat.AES256_GCM;
             }
@@ -139,7 +150,7 @@ namespace Confluent.SchemaRegistry.Encryption
         private string GetKekName(RuleContext ctx)
         {
             string name = ctx.GetParameter(FieldEncryptionExecutor.EncryptKekName);
-            if (String.IsNullOrEmpty(KekName))
+            if (String.IsNullOrEmpty(name))
             {
                 throw new RuleException("No kek name found");
             }
@@ -180,7 +191,7 @@ namespace Confluent.SchemaRegistry.Encryption
 
                 if (kek == null)
                 {
-                    throw new RuleException($"No kek found for {KekName} duringn produce");
+                    throw new RuleException($"No kek found for {KekName} during produce");
                 }
             }
             if (!String.IsNullOrEmpty(kmsType) && !kmsType.Equals(kek.KmsType))
@@ -349,12 +360,7 @@ namespace Confluent.SchemaRegistry.Encryption
                         .GetResult();
                 }
 
-                if (dek == null)
-                {
-                    return null;
-                }
-
-                return dek.EncryptedKeyMaterial != null ? dek : null;
+                return dek?.EncryptedKeyMaterial != null ? dek : null;
             }
             catch (SchemaRegistryException e)
             {
@@ -418,7 +424,7 @@ namespace Confluent.SchemaRegistry.Encryption
 
                     dek = GetOrCreateDek(ctx, IsDekRotated() ? FieldEncryptionExecutor.LatestVersion : null);
                     ciphertext = Cryptor.Encrypt(dek.KeyMaterialBytes, plaintext);
-                    if (!IsDekRotated())
+                    if (IsDekRotated())
                     {
                         ciphertext = PrefixVersion(dek.Version.Value, ciphertext);
                     }

@@ -35,7 +35,10 @@ namespace Confluent.SchemaRegistry
             ruleExecutorsMutex.Wait();
             try
             {
-                ruleExecutors.Add(name, executor);
+                if (!ruleExecutors.ContainsKey(name))
+                {
+                    ruleExecutors.Add(name, executor);
+                }
             }
             finally
             {
@@ -74,7 +77,10 @@ namespace Confluent.SchemaRegistry
             ruleActionsMutex.Wait();
             try
             {
-                ruleActions.Add(name, action);
+                if (!ruleActions.ContainsKey(name))
+                {
+                    ruleActions.Add(name, action);
+                }
             }
             finally
             {

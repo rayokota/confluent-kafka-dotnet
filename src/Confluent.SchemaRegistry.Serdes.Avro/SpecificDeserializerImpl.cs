@@ -165,7 +165,9 @@ namespace Confluent.SchemaRegistry.Serdes
                             var schema = Avro.Schema.Parse(ctx.Target.SchemaString);
                             return AvroUtils.Transform(ctx, schema, message, transform);
                         };
-                        data = (T) SerdeUtils.ExecuteRules(isKey, null, topic, headers, RuleMode.Read, null,
+                        // TODO fix
+                        string subject = "topic-value";
+                        data = (T) SerdeUtils.ExecuteRules(isKey, subject, topic, headers, RuleMode.Read, null,
                             writerSchemaJson, data, fieldTransformer);
                     }
 
