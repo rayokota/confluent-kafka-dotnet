@@ -141,6 +141,18 @@ namespace Confluent.SchemaRegistry.Serdes
             
             try
             {
+                bool isKey = context.Component == MessageComponentType.Key;
+                string topic = context.Topic;
+                string subject = this.subjectNameStrategy != null
+                    // use the subject name strategy specified in the serializer config if available.
+                    ? this.subjectNameStrategy(
+                        new SerializationContext(isKey ? MessageComponentType.Key : MessageComponentType.Value, topic),
+                        null)
+                    // else fall back to the deprecated config from (or default as currently supplied by) SchemaRegistry.
+                    : isKey
+                        ? schemaRegistryClient.ConstructKeySubjectName(topic)
+                        : schemaRegistryClient.ConstructValueSubjectName(topic);
+                
                 using (var stream = new MemoryStream(array))
                 using (var reader = new BinaryReader(stream))
                 {

@@ -163,8 +163,8 @@ namespace Confluent.SchemaRegistry.Serdes
         /// </summary>
         public IDictionary<string, string> UseLatestWithMetadata
         {
-            get { return GetDictionaryValue(PropertyNames.UseLatestWithMetadata); }
-            set { SetDictionaryValue(PropertyNames.UseLatestWithMetadata, value); }
+            get { return GetDictionaryProperty(PropertyNames.UseLatestWithMetadata); }
+            set { SetDictionaryProperty(PropertyNames.UseLatestWithMetadata, value); }
         }
 
 

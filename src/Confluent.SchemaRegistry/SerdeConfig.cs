@@ -48,7 +48,7 @@ namespace Confluent.SchemaRegistry
         public SerdeConfig(IDictionary<string, string> config) : base(config) { }
 
         /// <summary>
-        ///     Gets a configuration property dictionary value given a key.
+        ///     Gets a configuration property as a dictionary value given a key.
         /// </summary>
         /// <param name="key">
         ///     The configuration property to get.
@@ -56,7 +56,7 @@ namespace Confluent.SchemaRegistry
         /// <returns>
         ///     The configuration property value.
         /// </returns>
-        protected IDictionary<string, string> GetDictionaryValue(string key)
+        protected IDictionary<string, string> GetDictionaryProperty(string key)
         {
             var result = Get(key);
             if (result == null) { return null; }
@@ -68,24 +68,24 @@ namespace Confluent.SchemaRegistry
         }
 
         /// <summary>
-        ///     Set a configuration property using a dictionary
+        ///     Set a configuration property as a dictionary value
         /// </summary>
         /// <param name="key">
-        ///     The configuration property to get.
+        ///     The configuration property name.
         /// </param>
-        /// <returns>
-        ///     The configuration property value.
-        /// </returns>
-        protected void SetDictionaryValue(string name, IDictionary<string, string> value)
+        /// <param name="val">
+        ///     The property value.
+        /// </param>
+        protected void SetDictionaryProperty(string key, IDictionary<string, string> value)
         {
             if (value == null)
             {
-                SetObject(name, null);
+                SetObject(key, null);
                 return;
             }
             
             var result = string.Join(",", value.Select(kv => $"{kv.Key}={kv.Value}"));
-            SetObject(name, result);
+            SetObject(key, result);
         }
 
     }

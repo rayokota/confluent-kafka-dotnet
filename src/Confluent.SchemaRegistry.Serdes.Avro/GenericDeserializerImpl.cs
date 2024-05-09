@@ -67,6 +67,16 @@ namespace Confluent.SchemaRegistry.Serdes
                     throw new InvalidDataException($"Expecting data framing of length 5 bytes or more but total data size is {array.Length} bytes");
                 }
 
+                string subject = this.subjectNameStrategy != null
+                    // use the subject name strategy specified in the serializer config if available.
+                    ? this.subjectNameStrategy(
+                        new SerializationContext(isKey ? MessageComponentType.Key : MessageComponentType.Value, topic),
+                        null)
+                    // else fall back to the deprecated config from (or default as currently supplied by) SchemaRegistry.
+                    : isKey
+                        ? schemaRegistryClient.ConstructKeySubjectName(topic)
+                        : schemaRegistryClient.ConstructValueSubjectName(topic);
+                
                 using (var stream = new MemoryStream(array))
                 using (var reader = new BinaryReader(stream))
                 {
@@ -119,7 +129,7 @@ namespace Confluent.SchemaRegistry.Serdes
                             var schema = Avro.Schema.Parse(ctx.Target.SchemaString);
                             return AvroUtils.Transform(ctx, schema, message, transform);
                         };
-                        data = (GenericRecord) SerdeUtils.ExecuteRules(isKey, null, topic, headers, RuleMode.Read, null,
+                        data = (GenericRecord) SerdeUtils.ExecuteRules(isKey, subject, topic, headers, RuleMode.Read, null,
                             writerSchemaResult, data, fieldTransformer);
                     }
 

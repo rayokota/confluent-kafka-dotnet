@@ -112,6 +112,14 @@ namespace Confluent.SchemaRegistry.Serdes
         {
             try
             {
+                // Note: topic is not necessary for deserialization (or knowing if it's a key 
+                // or value) only the schema id is needed.
+
+                if (array.Length < 5)
+                {
+                    throw new InvalidDataException($"Expecting data framing of length 5 bytes or more but total data size is {array.Length} bytes");
+                }
+
                 string subject = this.subjectNameStrategy != null
                     // use the subject name strategy specified in the serializer config if available.
                     ? this.subjectNameStrategy(
@@ -122,14 +130,6 @@ namespace Confluent.SchemaRegistry.Serdes
                         ? schemaRegistryClient.ConstructKeySubjectName(topic)
                         : schemaRegistryClient.ConstructValueSubjectName(topic);
                 
-                // Note: topic is not necessary for deserialization (or knowing if it's a key 
-                // or value) only the schema id is needed.
-
-                if (array.Length < 5)
-                {
-                    throw new InvalidDataException($"Expecting data framing of length 5 bytes or more but total data size is {array.Length} bytes");
-                }
-
                 using (var stream = new MemoryStream(array))
                 using (var reader = new BinaryReader(stream))
                 {
