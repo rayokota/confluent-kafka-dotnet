@@ -73,10 +73,14 @@ namespace Confluent.SchemaRegistry.Serdes
                         new SerializationContext(isKey ? MessageComponentType.Key : MessageComponentType.Value, topic),
                         null)
                     // else fall back to the deprecated config from (or default as currently supplied by) SchemaRegistry.
-                    : isKey
-                        ? schemaRegistryClient.ConstructKeySubjectName(topic)
-                        : schemaRegistryClient.ConstructValueSubjectName(topic);
+                    : schemaRegistryClient == null 
+                        ? null
+                        : isKey 
+                            ? schemaRegistryClient.ConstructKeySubjectName(topic)
+                            : schemaRegistryClient.ConstructValueSubjectName(topic);
                 
+                Schema writerSchemaResult = null;
+                GenericRecord data;
                 using (var stream = new MemoryStream(array))
                 using (var reader = new BinaryReader(stream))
                 {
@@ -88,7 +92,6 @@ namespace Confluent.SchemaRegistry.Serdes
                     var writerId = IPAddress.NetworkToHostOrder(reader.ReadInt32());
 
                     DatumReader<GenericRecord> datumReader;
-                    Schema writerSchemaResult = null;
                     await deserializeMutex.WaitAsync().ConfigureAwait(continueOnCapturedContext: false);
                     try
                     {
@@ -120,21 +123,19 @@ namespace Confluent.SchemaRegistry.Serdes
                         deserializeMutex.Release();
                     }
                     
-                    GenericRecord data = datumReader.Read(default(GenericRecord), new BinaryDecoder(stream));
+                    data = datumReader.Read(default(GenericRecord), new BinaryDecoder(stream));
 
-                    if (writerSchemaResult != null)
-                    {
-                        FieldTransformer fieldTransformer = (ctx, transform, message) => 
-                        {
-                            var schema = Avro.Schema.Parse(ctx.Target.SchemaString);
-                            return AvroUtils.Transform(ctx, schema, message, transform);
-                        };
-                        data = (GenericRecord) SerdeUtils.ExecuteRules(isKey, subject, topic, headers, RuleMode.Read, null,
-                            writerSchemaResult, data, fieldTransformer);
-                    }
-
-                    return data;
                 }
+                
+                FieldTransformer fieldTransformer = (ctx, transform, message) => 
+                {
+                    var schema = Avro.Schema.Parse(ctx.Target.SchemaString);
+                    return AvroUtils.Transform(ctx, schema, message, transform);
+                };
+                data = (GenericRecord) SerdeUtils.ExecuteRules(isKey, subject, topic, headers, RuleMode.Read, null,
+                    writerSchemaResult, data, fieldTransformer);
+
+                return data;
             }
             catch (AggregateException e)
             {

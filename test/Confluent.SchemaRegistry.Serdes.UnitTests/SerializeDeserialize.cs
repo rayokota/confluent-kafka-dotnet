@@ -66,6 +66,7 @@ namespace Confluent.SchemaRegistry.Serdes.UnitTests
                 (string subject) => subjectStore[subject]
             );
             schemaRegistryClient = schemaRegistryMock.Object;
+            
             var dekRegistryMock = new Mock<IDekRegistryClient>();
             dekRegistryMock.Setup(x => x.CreateKekAsync(It.IsAny<Kek>())).ReturnsAsync(
                 (Kek kek) =>

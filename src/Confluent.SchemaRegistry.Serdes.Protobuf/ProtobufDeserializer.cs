@@ -69,6 +69,7 @@ namespace Confluent.SchemaRegistry.Serdes
         ///     Deserializer configuration properties (refer to 
         ///     <see cref="ProtobufDeserializerConfig" />).
         /// </param>
+        [Obsolete("Superseded by ProtobufDeserializer(ISchemaRegistryClient, ProtobufDeserializerConfig)")]
         public ProtobufDeserializer(IEnumerable<KeyValuePair<string, string>> config = null) : this(null, config)
         {
         }
@@ -78,7 +79,7 @@ namespace Confluent.SchemaRegistry.Serdes
         {
         }
 
-        public ProtobufDeserializer(ISchemaRegistryClient schemaRegistryClient, ProtobufDeserializerConfig config = null)
+        public ProtobufDeserializer(ISchemaRegistryClient schemaRegistryClient, ProtobufDeserializerConfig config)
         {
             this.schemaRegistryClient = schemaRegistryClient;
 
@@ -149,10 +150,14 @@ namespace Confluent.SchemaRegistry.Serdes
                         new SerializationContext(isKey ? MessageComponentType.Key : MessageComponentType.Value, topic),
                         null)
                     // else fall back to the deprecated config from (or default as currently supplied by) SchemaRegistry.
-                    : isKey
-                        ? schemaRegistryClient.ConstructKeySubjectName(topic)
-                        : schemaRegistryClient.ConstructValueSubjectName(topic);
+                    : schemaRegistryClient == null 
+                        ? null
+                        : isKey 
+                            ? schemaRegistryClient.ConstructKeySubjectName(topic)
+                            : schemaRegistryClient.ConstructValueSubjectName(topic);
                 
+                Schema writerSchema = null;
+                T message;
                 using (var stream = new MemoryStream(array))
                 using (var reader = new BinaryReader(stream))
                 {
@@ -184,7 +189,6 @@ namespace Confluent.SchemaRegistry.Serdes
                         }
                     }
 
-                    Schema writerSchema = null;
                     if (schemaRegistryClient != null)
                     {
                         await deserializeMutex.WaitAsync().ConfigureAwait(continueOnCapturedContext: false);
@@ -208,24 +212,21 @@ namespace Confluent.SchemaRegistry.Serdes
                         }
                     }
 
-                    T message = parser.ParseFrom(stream);
-                    
-                    if (writerSchema != null)
-                    {
-                        FieldTransformer fieldTransformer = (ctx, transform, message) =>
-                        {
-                            // TODO cache
-                            IDictionary<string, string> references =
-                                SerdeUtils.ResolveReferences(schemaRegistryClient, ctx.Target).Result;
-                            var fdSet = ProtobufUtils.Parse(ctx.Target.SchemaString, references);
-                            return ProtobufUtils.Transform(ctx, fdSet, message, transform);
-                        };
-                        message = (T) SerdeUtils.ExecuteRules(context.Component == MessageComponentType.Key, null, context.Topic, context.Headers, RuleMode.Read, null,
-                            writerSchema, message, fieldTransformer);
-                    }
-                    
-                    return message;
+                    message = parser.ParseFrom(stream);
                 }
+                
+                FieldTransformer fieldTransformer = (ctx, transform, message) =>
+                {
+                    // TODO cache
+                    IDictionary<string, string> references =
+                        SerdeUtils.ResolveReferences(schemaRegistryClient, ctx.Target).Result;
+                    var fdSet = ProtobufUtils.Parse(ctx.Target.SchemaString, references);
+                    return ProtobufUtils.Transform(ctx, fdSet, message, transform);
+                };
+                message = (T) SerdeUtils.ExecuteRules(context.Component == MessageComponentType.Key, subject, context.Topic, context.Headers, RuleMode.Read, null,
+                    writerSchema, message, fieldTransformer);
+                
+                return message;
             }
             catch (AggregateException e)
             {

@@ -75,6 +75,7 @@ namespace Confluent.SchemaRegistry.Serdes
         /// <param name="jsonSchemaGeneratorSettings">
         ///     JSON schema generator settings.
         /// </param>
+        [Obsolete("Superseded by JsonDeserializer(ISchemaRegistryClient, JsonDeserializerConfig)")]
         public JsonDeserializer(IEnumerable<KeyValuePair<string, string>> config = null, JsonSchemaGeneratorSettings jsonSchemaGeneratorSettings = null) :
             this(null, config, jsonSchemaGeneratorSettings)
         {
@@ -85,7 +86,7 @@ namespace Confluent.SchemaRegistry.Serdes
         {
         }
 
-        public JsonDeserializer(ISchemaRegistryClient schemaRegistryClient, JsonDeserializerConfig config = null, JsonSchemaGeneratorSettings jsonSchemaGeneratorSettings = null)
+        public JsonDeserializer(ISchemaRegistryClient schemaRegistryClient, JsonDeserializerConfig config, JsonSchemaGeneratorSettings jsonSchemaGeneratorSettings = null)
         {
             this.schemaRegistryClient = schemaRegistryClient;
             this.jsonSchemaGeneratorSettings = jsonSchemaGeneratorSettings;
@@ -149,10 +150,14 @@ namespace Confluent.SchemaRegistry.Serdes
                         new SerializationContext(isKey ? MessageComponentType.Key : MessageComponentType.Value, topic),
                         null)
                     // else fall back to the deprecated config from (or default as currently supplied by) SchemaRegistry.
-                    : isKey
-                        ? schemaRegistryClient.ConstructKeySubjectName(topic)
-                        : schemaRegistryClient.ConstructValueSubjectName(topic);
+                    : schemaRegistryClient == null 
+                        ? null
+                        : isKey 
+                            ? schemaRegistryClient.ConstructKeySubjectName(topic)
+                            : schemaRegistryClient.ConstructValueSubjectName(topic);
                 
+                Schema writerSchema = null;
+                T value;
                 using (var stream = new MemoryStream(array))
                 using (var reader = new BinaryReader(stream))
                 {
@@ -168,7 +173,6 @@ namespace Confluent.SchemaRegistry.Serdes
                     // schema has evolved). _schemaId is thus unused.
                     var writerId = IPAddress.NetworkToHostOrder(reader.ReadInt32());
 
-                    Schema writerSchema = null;
                     if (schemaRegistryClient != null)
                     {
                         await deserializeMutex.WaitAsync().ConfigureAwait(continueOnCapturedContext: false);
@@ -194,27 +198,24 @@ namespace Confluent.SchemaRegistry.Serdes
                     // A schema is not required to deserialize json messages.
                     // TODO: add validation capability.
 
-                    T value;
                     using (var jsonStream = new MemoryStream(array, headerSize, array.Length - headerSize))
                     using (var jsonReader = new StreamReader(stream, Encoding.UTF8))
                     {
                         value = Newtonsoft.Json.JsonConvert.DeserializeObject<T>(jsonReader.ReadToEnd(), this.jsonSchemaGeneratorSettings?.ActualSerializerSettings);
                     }
                     
-                    if (writerSchema != null)
-                    {
-                        FieldTransformer fieldTransformer = (ctx, transform, message) =>
-                        {
-                            var task = JsonSchema.FromJsonAsync(ctx.Target.SchemaString).ConfigureAwait(false);
-                            var schema = task.GetAwaiter().GetResult();
-                            return JsonUtils.Transform(ctx, schema, "$", message, transform);
-                        };
-                        value = (T) SerdeUtils.ExecuteRules(context.Component == MessageComponentType.Key, null, context.Topic, context.Headers, RuleMode.Read, null,
-                            writerSchema, value, fieldTransformer);
-                    }
-                    
-                    return value;
                 }
+                
+                FieldTransformer fieldTransformer = (ctx, transform, message) =>
+                {
+                    var task = JsonSchema.FromJsonAsync(ctx.Target.SchemaString).ConfigureAwait(false);
+                    var schema = task.GetAwaiter().GetResult();
+                    return JsonUtils.Transform(ctx, schema, "$", message, transform);
+                };
+                value = (T) SerdeUtils.ExecuteRules(context.Component == MessageComponentType.Key, subject, context.Topic, context.Headers, RuleMode.Read, null,
+                    writerSchema, value, fieldTransformer);
+                    
+                return value;
             }
             catch (AggregateException e)
             {
