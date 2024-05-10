@@ -21,12 +21,14 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Reflection;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Avro.Specific;
 using Avro.IO;
 using Avro.Generic;
 using Confluent.Kafka;
+using Newtonsoft.Json;
 
 
 namespace Confluent.SchemaRegistry.Serdes
@@ -133,10 +135,13 @@ namespace Confluent.SchemaRegistry.Serdes
                             ? schemaRegistryClient.ConstructKeySubjectName(topic)
                             : schemaRegistryClient.ConstructValueSubjectName(topic);
 
-                Schema readerSchema = SerdeUtils.GetReaderSchema(schemaRegistryClient, subject, useLatestWithMetadata, useLatestVersion);
+                Schema latestSchema = SerdeUtils.GetReaderSchema(schemaRegistryClient, subject, useLatestWithMetadata, useLatestVersion);
 
                 Schema writerSchemaJson = null;
-                T data;
+                Avro.Schema writerSchema = null;
+                DatumReader<T> datumReader = null;
+                object data;
+                IList<Migration> migrations = new List<Migration>();
                 using (var stream = new MemoryStream(array))
                 using (var reader = new BinaryReader(stream))
                 {
@@ -147,7 +152,6 @@ namespace Confluent.SchemaRegistry.Serdes
                     }
                     var writerId = IPAddress.NetworkToHostOrder(reader.ReadInt32());
 
-                    DatumReader<T> datumReader;
                     await deserializeMutex.WaitAsync().ConfigureAwait(continueOnCapturedContext: false);
                     try
                     {
@@ -160,7 +164,7 @@ namespace Confluent.SchemaRegistry.Serdes
                             }
 
                             writerSchemaJson = await schemaRegistryClient.GetSchemaAsync(writerId).ConfigureAwait(continueOnCapturedContext: false);
-                            var writerSchema = global::Avro.Schema.Parse(writerSchemaJson.SchemaString);
+                            writerSchema = global::Avro.Schema.Parse(writerSchemaJson.SchemaString);
 
                             datumReader = new SpecificReader<T>(writerSchema, ReaderSchema);
                             datumReaderBySchemaId[writerId] = datumReader;
@@ -171,41 +175,73 @@ namespace Confluent.SchemaRegistry.Serdes
                         deserializeMutex.Release();
                     }
 
-                    IList<Migration> migrations = new List<Migration>();
-                    if (readerSchema != null)
+                    if (latestSchema != null)
                     {
-                        migrations = SerdeUtils.GetMigrations(schemaRegistryClient, subject, writerSchemaJson, readerSchema);
+                        migrations = SerdeUtils.GetMigrations(schemaRegistryClient, subject, writerSchemaJson, latestSchema);
                     }
-                
-                    if (typeof(ISpecificRecord).IsAssignableFrom(typeof(T)))
+
+                    if (migrations.Count > 0)
                     {
-                        // This is a generic deserializer and it knows the type that needs to be serialized into. 
-                        // Passing default(T) will result in null value and that will force the datumRead to
-                        // use the schema namespace and name provided in the schema, which may not match (T).
-                        var reuse = Activator.CreateInstance<T>();
-                        data = datumReader.Read(reuse, new BinaryDecoder(stream));
+                        data = new GenericReader<GenericRecord>(writerSchema, writerSchema)
+                            .Read(default(GenericRecord), new BinaryDecoder(stream));
+                        
+                        string jsonString = null;
+                        using (var jsonStream = new MemoryStream())
+                        {
+                            GenericRecord record = (GenericRecord)data;
+                            DatumWriter<object> datumWriter = new GenericDatumWriter<object>(writerSchema);
+
+                            JsonEncoder encoder = new JsonEncoder(writerSchema, jsonStream);
+                            datumWriter.Write(record, encoder);
+                            encoder.Flush();
+
+                            jsonString = Encoding.UTF8.GetString(jsonStream.ToArray());
+                        }
+                        
+                        Newtonsoft.Json.Linq.JToken json = Newtonsoft.Json.Linq.JToken.Parse(jsonString);
+                        json = (Newtonsoft.Json.Linq.JToken) SerdeUtils.ExecuteMigrations(migrations, isKey, subject, topic, headers, json);
+                        Avro.IO.Decoder decoder = new JsonDecoder(writerSchema, json.ToString(Formatting.None));
+                        data = Read(datumReader, decoder);
                     }
                     else
                     {
-                        data = datumReader.Read(default(T), new BinaryDecoder(stream));
+                        data = Read(datumReader, new BinaryDecoder(stream));
                     }
                 }
-                
+
                 FieldTransformer fieldTransformer = (ctx, transform, message) => 
                 {
                     var schema = Avro.Schema.Parse(ctx.Target.SchemaString);
                     return AvroUtils.Transform(ctx, schema, message, transform);
                 };
-                data = (T) SerdeUtils.ExecuteRules(isKey, subject, topic, headers, RuleMode.Read, null,
+                data = SerdeUtils.ExecuteRules(isKey, subject, topic, headers, RuleMode.Read, null,
                     writerSchemaJson, data, fieldTransformer);
 
-                return data;
+                return (T) data;
             }
             catch (AggregateException e)
             {
                 throw e.InnerException;
             }
         }
+    
+        private static object Read(DatumReader<T> datumReader, Avro.IO.Decoder decoder)
+        {
+            object data;
+            if (typeof(ISpecificRecord).IsAssignableFrom(typeof(T)))
+            {
+                // This is a generic deserializer and it knows the type that needs to be serialized into. 
+                // Passing default(T) will result in null value and that will force the datumRead to
+                // use the schema namespace and name provided in the schema, which may not match (T).
+                var reuse = Activator.CreateInstance<T>();
+                data = datumReader.Read(reuse, decoder);
+            }
+            else
+            {
+                data = datumReader.Read(default(T), decoder);
+            }
 
+            return data;
+        }
     }
 }

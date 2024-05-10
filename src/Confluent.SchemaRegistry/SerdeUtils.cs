@@ -191,6 +191,22 @@ namespace Confluent.SchemaRegistry
             return null;
         }
         
+        public static object ExecuteMigrations(
+            IList<Migration> migrations, 
+            bool isKey,
+            String subject, 
+            String topic,
+            Headers headers, 
+            object message) 
+        {
+            foreach (Migration m in migrations)
+            {
+                message = ExecuteRules(isKey, subject, topic, headers, m.RuleMode,
+                    m.Source, m.Target, message, null);
+            }
+            return message;
+        }
+
         /// <summary>
         ///     Execute rules 
         /// </summary>
@@ -208,8 +224,14 @@ namespace Confluent.SchemaRegistry
         /// <exception cref="RuleConditionException"></exception>
         /// <exception cref="ArgumentException"></exception>
         public static object ExecuteRules(
-            bool isKey, string subject, string topic, Headers headers,
-            RuleMode ruleMode, Schema source, Schema target, object message,
+            bool isKey, 
+            string subject, 
+            string topic, 
+            Headers headers,
+            RuleMode ruleMode, 
+            Schema source, 
+            Schema target, 
+            object message,
             FieldTransformer fieldTransformer)
         {
             if (message == null || target == null)
