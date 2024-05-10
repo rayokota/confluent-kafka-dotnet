@@ -24,6 +24,22 @@ using Confluent.Kafka;
 
 namespace Confluent.SchemaRegistry
 {
+    public class Migration
+    {
+        public Migration(RuleMode ruleMode, Schema source, Schema target)
+        {
+            RuleMode = ruleMode;
+            Source = source;
+            Target = target;
+        }
+        
+        public RuleMode RuleMode { get; set; }
+        
+        public Schema Source { get; set; }
+        
+        public Schema Target { get; set; }
+    }
+    
     /// <summary>
     ///     Serde utilities
     /// </summary>
@@ -75,6 +91,104 @@ namespace Confluent.SchemaRegistry
             }
 
             return schemas;
+        }
+
+        public static IList<Migration> GetMigrations(
+            ISchemaRegistryClient client, 
+            string subject, 
+            Schema writerSchema,
+            Schema readerSchema)
+        {
+            RuleMode migrationMode;
+            Schema first;
+            Schema last;
+            IList<Migration> migrations = new List<Migration>();
+            if (writerSchema.Version < readerSchema.Version)
+            {
+                migrationMode = RuleMode.Upgrade;
+                first = writerSchema;
+                last = readerSchema;
+            }
+            else if (writerSchema.Version > readerSchema.Version)
+            {
+                migrationMode = RuleMode.Downgrade;
+                first = readerSchema;
+                last = writerSchema;
+            }
+            else
+            {
+                return migrations;
+            }
+
+            IList<Schema> versions = GetSchemasBetween(client, subject, first, last);
+            Schema previous = null;
+            for (int i = 0; i < versions.Count; i++) {
+              Schema current = versions[i];
+              if (i == 0) {
+                // skip the first version
+                previous = current;
+                continue;
+              }
+              if (current.RuleSet != null && current.RuleSet.HasRules(migrationMode)) {
+                Migration m;
+                if (migrationMode == RuleMode.Upgrade) {
+                  m = new Migration(migrationMode, previous, current);
+                } else {
+                  m = new Migration(migrationMode, current, previous);
+                }
+                migrations.Add(m);
+              }
+              previous = current;
+            }
+            if (migrationMode == RuleMode.Downgrade)
+            {
+                migrations = migrations.Reverse().ToList();
+            }
+            return migrations;
+        }
+
+        private static IList<Schema> GetSchemasBetween(
+            ISchemaRegistryClient client,
+            string subject,
+            Schema first,
+            Schema last)
+        {
+            if (last.Version - first.Version <= 1)
+            {
+                return new List<Schema> { first, last };
+            }
+
+            int version1 = first.Version;
+            int version2 = last.Version;
+            IList<Schema> schemas = new List<Schema>();
+            schemas.Add(first);
+            for (int i = version1 + 1; i < version2; i++) {
+                schemas.Add(client.GetRegisteredSchemaAsync(subject, i).Result);
+            }
+            schemas.Add(last);
+            return schemas;
+        }
+        
+        public static RegisteredSchema GetReaderSchema(
+            ISchemaRegistryClient client, 
+            string subject, 
+            IDictionary<string, string> useLatestMetadata, 
+            bool useLatestVersion)
+        {
+            if (client == null)
+            {
+                return null;
+            }
+            if (useLatestMetadata != null && useLatestMetadata.Any())
+            {
+                return client.GetLatestWithMetadataAsync(subject, useLatestMetadata, false).Result;
+            }
+            if (useLatestVersion)
+            {
+                return client.GetLatestSchemaAsync(subject).Result;
+            }
+
+            return null;
         }
         
         /// <summary>

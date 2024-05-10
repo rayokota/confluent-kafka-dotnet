@@ -18,6 +18,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Reflection;
 using System.Threading;
@@ -119,7 +120,7 @@ namespace Confluent.SchemaRegistry.Serdes
                 {
                     throw new InvalidDataException($"Expecting data framing of length 5 bytes or more but total data size is {array.Length} bytes");
                 }
-
+                
                 string subject = this.subjectNameStrategy != null
                     // use the subject name strategy specified in the serializer config if available.
                     ? this.subjectNameStrategy(
@@ -131,7 +132,9 @@ namespace Confluent.SchemaRegistry.Serdes
                         : isKey 
                             ? schemaRegistryClient.ConstructKeySubjectName(topic)
                             : schemaRegistryClient.ConstructValueSubjectName(topic);
-                
+
+                Schema readerSchema = SerdeUtils.GetReaderSchema(schemaRegistryClient, subject, useLatestWithMetadata, useLatestVersion);
+
                 Schema writerSchemaJson = null;
                 T data;
                 using (var stream = new MemoryStream(array))
@@ -168,6 +171,12 @@ namespace Confluent.SchemaRegistry.Serdes
                         deserializeMutex.Release();
                     }
 
+                    IList<Migration> migrations = new List<Migration>();
+                    if (readerSchema != null)
+                    {
+                        migrations = SerdeUtils.GetMigrations(schemaRegistryClient, subject, writerSchemaJson, readerSchema);
+                    }
+                
                     if (typeof(ISpecificRecord).IsAssignableFrom(typeof(T)))
                     {
                         // This is a generic deserializer and it knows the type that needs to be serialized into. 

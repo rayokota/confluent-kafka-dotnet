@@ -346,6 +346,17 @@ namespace Confluent.SchemaRegistry
                         HttpMethod.Get)
                     .ConfigureAwait(continueOnCapturedContext: false));
 
+        public async Task<RegisteredSchema> GetLatestWithMetadataAsync(string subject, IDictionary<string, string> metadata, bool ignoreDeletedSchemas)
+            => SanitizeRegisteredSchema(
+                await RequestAsync<RegisteredSchema>($"subjects/{WebUtility.UrlEncode(subject)}/metadata?{getKeyValuePairs(metadata)}&deleted={!ignoreDeletedSchemas}",
+                        HttpMethod.Get)
+                    .ConfigureAwait(continueOnCapturedContext: false));
+        
+        private string getKeyValuePairs(IDictionary<string, string> metadata)
+        {
+            return string.Join("&", metadata.Select(x => $"{x.Key}={x.Value}"));
+        }
+        
         public async Task<int> RegisterSchemaAsync(string subject, Schema schema, bool normalize)
             => (await RequestAsync<SchemaId>(
                     $"subjects/{WebUtility.UrlEncode(subject)}/versions?normalize={normalize}", HttpMethod.Post,

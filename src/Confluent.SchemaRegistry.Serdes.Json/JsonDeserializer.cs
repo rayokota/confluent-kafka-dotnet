@@ -75,7 +75,6 @@ namespace Confluent.SchemaRegistry.Serdes
         /// <param name="jsonSchemaGeneratorSettings">
         ///     JSON schema generator settings.
         /// </param>
-        [Obsolete("Superseded by JsonDeserializer(ISchemaRegistryClient, JsonDeserializerConfig)")]
         public JsonDeserializer(IEnumerable<KeyValuePair<string, string>> config = null, JsonSchemaGeneratorSettings jsonSchemaGeneratorSettings = null) :
             this(null, config, jsonSchemaGeneratorSettings)
         {
@@ -140,22 +139,24 @@ namespace Confluent.SchemaRegistry.Serdes
                 throw new InvalidDataException($"Expecting data framing of length 6 bytes or more but total data size is {array.Length} bytes");
             }
             
+            bool isKey = context.Component == MessageComponentType.Key;
+            string topic = context.Topic;
+            string subject = this.subjectNameStrategy != null
+                // use the subject name strategy specified in the serializer config if available.
+                ? this.subjectNameStrategy(
+                    new SerializationContext(isKey ? MessageComponentType.Key : MessageComponentType.Value, topic),
+                    null)
+                // else fall back to the deprecated config from (or default as currently supplied by) SchemaRegistry.
+                : schemaRegistryClient == null 
+                    ? null
+                    : isKey 
+                        ? schemaRegistryClient.ConstructKeySubjectName(topic)
+                        : schemaRegistryClient.ConstructValueSubjectName(topic);
+            
+            Schema readerSchema = SerdeUtils.GetReaderSchema(schemaRegistryClient, subject, useLatestWithMetadata, useLatestVersion);
+                
             try
             {
-                bool isKey = context.Component == MessageComponentType.Key;
-                string topic = context.Topic;
-                string subject = this.subjectNameStrategy != null
-                    // use the subject name strategy specified in the serializer config if available.
-                    ? this.subjectNameStrategy(
-                        new SerializationContext(isKey ? MessageComponentType.Key : MessageComponentType.Value, topic),
-                        null)
-                    // else fall back to the deprecated config from (or default as currently supplied by) SchemaRegistry.
-                    : schemaRegistryClient == null 
-                        ? null
-                        : isKey 
-                            ? schemaRegistryClient.ConstructKeySubjectName(topic)
-                            : schemaRegistryClient.ConstructValueSubjectName(topic);
-                
                 Schema writerSchema = null;
                 T value;
                 using (var stream = new MemoryStream(array))

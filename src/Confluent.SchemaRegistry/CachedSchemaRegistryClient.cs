@@ -574,6 +574,8 @@ namespace Confluent.SchemaRegistry
         public async Task<RegisteredSchema> GetLatestSchemaAsync(string subject)
             => await restService.GetLatestSchemaAsync(subject).ConfigureAwait(continueOnCapturedContext: false);
 
+        public async Task<RegisteredSchema> GetLatestWithMetadataAsync(string subject, IDictionary<string, string> metadata, bool ignoreDeletedSchemas)
+            => await restService.GetLatestWithMetadataAsync(subject, metadata, ignoreDeletedSchemas).ConfigureAwait(continueOnCapturedContext: false);
 
         /// <inheritdoc/>
         public Task<List<string>> GetAllSubjectsAsync()

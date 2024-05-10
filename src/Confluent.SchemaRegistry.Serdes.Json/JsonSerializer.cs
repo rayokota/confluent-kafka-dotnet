@@ -176,10 +176,9 @@ namespace Confluent.SchemaRegistry.Serdes
 
                     if (!subjectsRegistered.Contains(subject))
                     {
-                        if (useLatestVersion)
+                        latestSchema = SerdeUtils.GetReaderSchema(schemaRegistryClient, subject, useLatestWithMetadata, useLatestVersion);
+                        if (latestSchema != null)
                         {
-                            latestSchema = await schemaRegistryClient.GetLatestSchemaAsync(subject)
-                                .ConfigureAwait(continueOnCapturedContext: false);
                             schemaId = latestSchema.Id;
                         }
                         else

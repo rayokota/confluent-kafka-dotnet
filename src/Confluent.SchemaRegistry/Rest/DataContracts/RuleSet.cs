@@ -15,6 +15,7 @@
 // Refer to LICENSE for more information.
 
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.Serialization;
 
 namespace Confluent.SchemaRegistry
@@ -38,5 +39,23 @@ namespace Confluent.SchemaRegistry
             MigrationRules = migrationRules;
             DomainRules = domainRules;
         }
+        
+      public bool HasRules(RuleMode mode) {
+        switch (mode) {
+          case RuleMode.Upgrade:
+          case RuleMode.Downgrade:
+            return MigrationRules.Any(r => r.Mode == mode || r.Mode == RuleMode.UpDown);
+          case RuleMode.UpDown:
+            return MigrationRules.Any(r => r.Mode == mode);
+          case RuleMode.Write:
+          case RuleMode.Read:
+            return DomainRules.Any(r => r.Mode == mode || r.Mode == RuleMode.Write);
+          case RuleMode.WriteRead:
+            return DomainRules.Any(r => r.Mode == mode);
+          default:
+            return false;
+        }
+      }
+
     }
 }
