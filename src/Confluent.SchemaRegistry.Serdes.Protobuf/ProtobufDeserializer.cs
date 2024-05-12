@@ -216,16 +216,20 @@ namespace Confluent.SchemaRegistry.Serdes
 
                     message = parser.ParseFrom(stream);
                 }
-                FieldTransformer fieldTransformer = (ctx, transform, message) =>
+
+                if (writerSchema != null)
                 {
-                    // TODO cache
-                    IDictionary<string, string> references =
-                        SerdeUtils.ResolveReferences(schemaRegistryClient, ctx.Target).Result;
-                    var fdSet = ProtobufUtils.Parse(ctx.Target.SchemaString, references);
-                    return ProtobufUtils.Transform(ctx, fdSet, message, transform);
-                };
-                message = (T) SerdeUtils.ExecuteRules(context.Component == MessageComponentType.Key, subject, context.Topic, context.Headers, RuleMode.Read, null,
-                    writerSchema, message, fieldTransformer);
+                    IDictionary<string, string> references = await SerdeUtils.ResolveReferences(schemaRegistryClient, writerSchema)
+                            .ConfigureAwait(continueOnCapturedContext: false);
+                    FieldTransformer fieldTransformer = (ctx, transform, message) =>
+                    {
+                        // TODO cache
+                        var fdSet = ProtobufUtils.Parse(ctx.Target.SchemaString, references);
+                        return ProtobufUtils.Transform(ctx, fdSet, message, transform);
+                    };
+                    message = (T) SerdeUtils.ExecuteRules(context.Component == MessageComponentType.Key, subject, context.Topic, context.Headers, RuleMode.Read, null,
+                        writerSchema, message, fieldTransformer);
+                }
                 
                 return message;
             }

@@ -206,11 +206,10 @@ namespace Confluent.SchemaRegistry.Serdes
                 
                 if (latestSchema != null)
                 {
+                    var laterSchemaJson = await JsonSchema.FromJsonAsync(latestSchema).ConfigureAwait(false);
                     FieldTransformer fieldTransformer = (ctx, transform, message) =>
                     {
-                        var task = JsonSchema.FromJsonAsync(ctx.Target.SchemaString).ConfigureAwait(false);
-                        var schema = task.GetAwaiter().GetResult();
-                        return JsonUtils.Transform(ctx, schema, "$", message, transform);
+                        return JsonUtils.Transform(ctx, laterSchemaJson, "$", message, transform);
                     };
                     value = (T)SerdeUtils.ExecuteRules(context.Component == MessageComponentType.Key, subject, context.Topic, context.Headers, RuleMode.Write, null,
                         latestSchema, value, fieldTransformer);

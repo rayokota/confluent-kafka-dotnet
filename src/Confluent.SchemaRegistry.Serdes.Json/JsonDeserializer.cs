@@ -207,15 +207,16 @@ namespace Confluent.SchemaRegistry.Serdes
                     }
                     
                 }
-                
-                FieldTransformer fieldTransformer = (ctx, transform, message) =>
+                if (writerSchema != null)
                 {
-                    var task = JsonSchema.FromJsonAsync(ctx.Target.SchemaString).ConfigureAwait(false);
-                    var schema = task.GetAwaiter().GetResult();
-                    return JsonUtils.Transform(ctx, schema, "$", message, transform);
-                };
-                value = (T) SerdeUtils.ExecuteRules(context.Component == MessageComponentType.Key, subject, context.Topic, context.Headers, RuleMode.Read, null,
-                    writerSchema, value, fieldTransformer);
+                    JsonSchema writerSchemaJson = await JsonSchema.FromJsonAsync(writerSchema).ConfigureAwait(false);
+                    FieldTransformer fieldTransformer = (ctx, transform, message) =>
+                    {
+                        return JsonUtils.Transform(ctx, writerSchemaJson, "$", message, transform);
+                    };
+                    value = (T) SerdeUtils.ExecuteRules(context.Component == MessageComponentType.Key, subject, context.Topic, context.Headers, RuleMode.Read, null,
+                        writerSchema, value, fieldTransformer);
+                } 
                     
                 return value;
             }

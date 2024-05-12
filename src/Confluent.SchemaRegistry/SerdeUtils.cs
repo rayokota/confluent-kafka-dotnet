@@ -161,14 +161,17 @@ namespace Confluent.SchemaRegistry
                 return new List<Schema> { first, last };
             }
 
+            var tasks = new List<Task<RegisteredSchema>>();
             int version1 = first.Version;
             int version2 = last.Version;
-            IList<Schema> schemas = new List<Schema>();
-            schemas.Add(first);
             for (int i = version1 + 1; i < version2; i++) {
-                schemas.Add(await client.GetRegisteredSchemaAsync(subject, i)
-                    .ConfigureAwait(continueOnCapturedContext: false));
+                tasks.Add(client.GetRegisteredSchemaAsync(subject, i));
             }
+            await Task.WhenAll(tasks.ToArray()).ConfigureAwait(continueOnCapturedContext: false);
+
+            var schemas = new List<Schema>();
+            schemas.Add(first);
+            schemas.AddRange(tasks.Select(t => t.Result.Schema));
             schemas.Add(last);
             return schemas;
         }
