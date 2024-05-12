@@ -48,7 +48,7 @@ namespace Confluent.SchemaRegistry.Encryption.Aws
                 KeyId = keyId,
                 Plaintext = dataStream
             };
-            var response = await kmsClient.EncryptAsync(request);
+            var response = await kmsClient.EncryptAsync(request).ConfigureAwait(false);
             return response.CiphertextBlob.ToArray();
         }
 
@@ -60,7 +60,7 @@ namespace Confluent.SchemaRegistry.Encryption.Aws
                 KeyId = keyId,
                 CiphertextBlob = dataStream
             };
-            var response = await kmsClient.DecryptAsync(request);
+            var response = await kmsClient.DecryptAsync(request).ConfigureAwait(false);
             return response.Plaintext.ToArray();
         }
     }

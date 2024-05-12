@@ -135,7 +135,8 @@ namespace Confluent.SchemaRegistry.Serdes
                             ? schemaRegistryClient.ConstructKeySubjectName(topic)
                             : schemaRegistryClient.ConstructValueSubjectName(topic);
 
-                Schema latestSchema = SerdeUtils.GetReaderSchema(schemaRegistryClient, subject, useLatestWithMetadata, useLatestVersion);
+                Schema latestSchema = await SerdeUtils.GetReaderSchema(schemaRegistryClient, subject, useLatestWithMetadata, useLatestVersion)
+                    .ConfigureAwait(continueOnCapturedContext: false);
 
                 Schema writerSchemaJson = null;
                 Avro.Schema writerSchema = null;
@@ -177,7 +178,8 @@ namespace Confluent.SchemaRegistry.Serdes
 
                     if (latestSchema != null)
                     {
-                        migrations = SerdeUtils.GetMigrations(schemaRegistryClient, subject, writerSchemaJson, latestSchema);
+                        migrations = await SerdeUtils.GetMigrations(schemaRegistryClient, subject, writerSchemaJson, latestSchema)
+                            .ConfigureAwait(continueOnCapturedContext: false);
                     }
 
                     if (migrations.Count > 0)

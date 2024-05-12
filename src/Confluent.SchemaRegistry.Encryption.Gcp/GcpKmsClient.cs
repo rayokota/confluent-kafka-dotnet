@@ -32,13 +32,15 @@ namespace Confluent.SchemaRegistry.Encryption.Gcp
         
         public async Task<byte[]> Encrypt(byte[] plaintext)
         {
-            var result = await kmsClient.EncryptAsync(keyName, ByteString.CopyFrom(plaintext));
+            var result = await kmsClient.EncryptAsync(keyName, ByteString.CopyFrom(plaintext))
+                .ConfigureAwait(false);
             return result.Ciphertext.ToByteArray();
         }
 
         public async Task<byte[]> Decrypt(byte[] ciphertext)
         {
-            var result = await kmsClient.DecryptAsync(keyId, ByteString.CopyFrom(ciphertext));
+            var result = await kmsClient.DecryptAsync(keyId, ByteString.CopyFrom(ciphertext))
+                .ConfigureAwait(false);
             return result.Plaintext.ToByteArray();
         }
     }

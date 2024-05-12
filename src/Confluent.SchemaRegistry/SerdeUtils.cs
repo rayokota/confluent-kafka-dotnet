@@ -61,7 +61,8 @@ namespace Confluent.SchemaRegistry
 
             IDictionary<string, string> result = new Dictionary<string, string>();
             ISet<string> visited = new HashSet<string>();
-            result = await ResolveReferences(client, schema, result, visited);
+            result = await ResolveReferences(client, schema, result, visited)
+                .ConfigureAwait(continueOnCapturedContext: false);
             return result;
         }
         
@@ -86,14 +87,15 @@ namespace Confluent.SchemaRegistry
                         throw new SerializationException("Could not find schema " + reference.Subject + "-" + reference.Version);
                     }
                     schemas[reference.Name] = s.SchemaString;
-                    await ResolveReferences(client, s, schemas, visited);
+                    await ResolveReferences(client, s, schemas, visited)
+                        .ConfigureAwait(continueOnCapturedContext: false);
                 }
             }
 
             return schemas;
         }
 
-        public static IList<Migration> GetMigrations(
+        public static async Task<IList<Migration>> GetMigrations(
             ISchemaRegistryClient client, 
             string subject, 
             Schema writerSchema,
@@ -120,7 +122,8 @@ namespace Confluent.SchemaRegistry
                 return migrations;
             }
 
-            IList<Schema> versions = GetSchemasBetween(client, subject, first, last);
+            IList<Schema> versions = await GetSchemasBetween(client, subject, first, last)
+                .ConfigureAwait(continueOnCapturedContext: false);
             Schema previous = null;
             for (int i = 0; i < versions.Count; i++) {
               Schema current = versions[i];
@@ -147,7 +150,7 @@ namespace Confluent.SchemaRegistry
             return migrations;
         }
 
-        private static IList<Schema> GetSchemasBetween(
+        private static async Task<IList<Schema>> GetSchemasBetween(
             ISchemaRegistryClient client,
             string subject,
             Schema first,
@@ -163,13 +166,14 @@ namespace Confluent.SchemaRegistry
             IList<Schema> schemas = new List<Schema>();
             schemas.Add(first);
             for (int i = version1 + 1; i < version2; i++) {
-                schemas.Add(client.GetRegisteredSchemaAsync(subject, i).Result);
+                schemas.Add(await client.GetRegisteredSchemaAsync(subject, i)
+                    .ConfigureAwait(continueOnCapturedContext: false));
             }
             schemas.Add(last);
             return schemas;
         }
         
-        public static RegisteredSchema GetReaderSchema(
+        public static async Task<RegisteredSchema> GetReaderSchema(
             ISchemaRegistryClient client, 
             string subject, 
             IDictionary<string, string> useLatestMetadata, 
@@ -181,11 +185,13 @@ namespace Confluent.SchemaRegistry
             }
             if (useLatestMetadata != null && useLatestMetadata.Any())
             {
-                return client.GetLatestWithMetadataAsync(subject, useLatestMetadata, false).Result;
+                return await client.GetLatestWithMetadataAsync(subject, useLatestMetadata, false)
+                    .ConfigureAwait(continueOnCapturedContext: false);
             }
             if (useLatestVersion)
             {
-                return client.GetLatestSchemaAsync(subject).Result;
+                return await client.GetLatestSchemaAsync(subject)
+                    .ConfigureAwait(continueOnCapturedContext: false);
             }
 
             return null;

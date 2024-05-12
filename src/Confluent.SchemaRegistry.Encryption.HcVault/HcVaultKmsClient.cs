@@ -48,7 +48,8 @@ namespace Confluent.SchemaRegistry.Encryption.HcVault
                 Base64EncodedPlainText = encodedPlaintext
             };
 
-            Secret<EncryptionResponse> encryptionResponse = await kmsClient.V1.Secrets.Transit.EncryptAsync(keyName, encryptOptions);
+            Secret<EncryptionResponse> encryptionResponse = await kmsClient.V1.Secrets.Transit.EncryptAsync(keyName, encryptOptions)
+                .ConfigureAwait(false);
             return Encoding.UTF8.GetBytes(encryptionResponse.Data.CipherText);
         }
 
@@ -60,7 +61,8 @@ namespace Confluent.SchemaRegistry.Encryption.HcVault
                 CipherText = encodedCiphertext
             };
 
-            Secret<DecryptionResponse> decryptionResponse = await kmsClient.V1.Secrets.Transit.DecryptAsync(keyName, decryptOptions);
+            Secret<DecryptionResponse> decryptionResponse = await kmsClient.V1.Secrets.Transit.DecryptAsync(keyName, decryptOptions)
+                .ConfigureAwait(false);
             return Convert.FromBase64String(decryptionResponse.Data.Base64EncodedPlainText);
         }
     }

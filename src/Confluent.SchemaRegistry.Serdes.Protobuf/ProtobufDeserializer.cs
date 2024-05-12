@@ -153,7 +153,8 @@ namespace Confluent.SchemaRegistry.Serdes
                         ? schemaRegistryClient.ConstructKeySubjectName(topic)
                         : schemaRegistryClient.ConstructValueSubjectName(topic);
             
-            Schema latestSchema = SerdeUtils.GetReaderSchema(schemaRegistryClient, subject, useLatestWithMetadata, useLatestVersion);
+            Schema latestSchema = await SerdeUtils.GetReaderSchema(schemaRegistryClient, subject, useLatestWithMetadata, useLatestVersion)
+                .ConfigureAwait(continueOnCapturedContext: false);
                 
             try
             {
