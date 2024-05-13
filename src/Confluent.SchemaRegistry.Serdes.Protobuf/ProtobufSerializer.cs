@@ -226,9 +226,9 @@ namespace Confluent.SchemaRegistry.Serdes
                 };
                 tasks.Add(t(fileDescriptor));
             }
-            await Task.WhenAll(tasks.ToArray()).ConfigureAwait(continueOnCapturedContext: false);
+            SchemaReference[] refs = await Task.WhenAll(tasks.ToArray()).ConfigureAwait(continueOnCapturedContext: false);
 
-            return tasks.Select(t => t.Result).ToList();
+            return refs.ToList();
         }
 
 
@@ -334,8 +334,7 @@ namespace Confluent.SchemaRegistry.Serdes
                     value = await SerdeUtils.ExecuteRules(context.Component == MessageComponentType.Key, subject,
                             context.Topic, context.Headers, RuleMode.Write, null,
                             latestSchema, value, fieldTransformer)
-                        .ContinueWith(t => (T)t.Result)
-                        .ConfigureAwait(continueOnCapturedContext: false);
+                        .ContinueWith(t => (T)t.Result).ConfigureAwait(continueOnCapturedContext: false);
                 }
 
                 using (var stream = new MemoryStream(initialBufferSize))

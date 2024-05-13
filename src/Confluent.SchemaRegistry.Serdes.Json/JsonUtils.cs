@@ -77,8 +77,8 @@ namespace Confluent.SchemaRegistry.Serdes
                 var tasks = ((IList<object>)message)
                     .Select((it, index) => Transform(ctx, subschema, path + '[' + index + ']', it, fieldTransform))
                     .ToList();
-                await Task.WhenAll(tasks).ConfigureAwait(false);
-                return tasks.Select(t => t.Result).ToList();
+                object[] items = await Task.WhenAll(tasks).ConfigureAwait(false);
+                return items.ToList();
             }
             else if (schema.IsObject)
             {
