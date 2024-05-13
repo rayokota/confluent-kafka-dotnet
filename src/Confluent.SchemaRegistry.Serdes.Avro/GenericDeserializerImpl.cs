@@ -110,7 +110,8 @@ namespace Confluent.SchemaRegistry.Serdes
                                 datumReaderBySchemaId.Clear();
                             }
 
-                            writerSchemaResult = await schemaRegistryClient.GetSchemaAsync(writerId).ConfigureAwait(continueOnCapturedContext: false);
+                            writerSchemaResult = await schemaRegistryClient.GetSchemaAsync(writerId)
+                                .ConfigureAwait(continueOnCapturedContext: false);
                             if (writerSchemaResult.SchemaType != SchemaType.Avro)
                             {
                                 throw new InvalidOperationException("Expecting writer schema to have type Avro, not {writerSchemaResult.SchemaType}");
@@ -130,13 +131,15 @@ namespace Confluent.SchemaRegistry.Serdes
 
                 }
                 
-                FieldTransformer fieldTransformer = (ctx, transform, message) => 
+                FieldTransformer fieldTransformer = async (ctx, transform, message) => 
                 {
                     var schema = Avro.Schema.Parse(ctx.Target.SchemaString);
-                    return AvroUtils.Transform(ctx, schema, message, transform);
+                    return await AvroUtils.Transform(ctx, schema, message, transform).ConfigureAwait(false);
                 };
-                data = (GenericRecord) SerdeUtils.ExecuteRules(isKey, subject, topic, headers, RuleMode.Read, null,
-                    writerSchemaResult, data, fieldTransformer);
+                data = await SerdeUtils.ExecuteRules(isKey, subject, topic, headers, RuleMode.Read, null,
+                    writerSchemaResult, data, fieldTransformer)
+                    .ContinueWith(t => (GenericRecord)t.Result)
+                    .ConfigureAwait(continueOnCapturedContext: false);
 
                 return data;
             }

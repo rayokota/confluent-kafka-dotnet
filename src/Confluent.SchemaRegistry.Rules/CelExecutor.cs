@@ -1,4 +1,6 @@
-﻿namespace Confluent.SchemaRegistry.Rules
+﻿using Microsoft.Extensions.Logging.Abstractions;
+
+namespace Confluent.SchemaRegistry.Rules
 {
     public class CelExecutor : IRuleExecutor
     {
@@ -20,10 +22,11 @@
         public string Type() => RuleType;
 
 
-        public object Transform(RuleContext ctx, object message)
+        public Task<object> Transform(RuleContext ctx, object message)
         {
             // TODO cache
-            return null;
+            object result = null;
+            return Task.FromResult(result);
         }
 
         public void Dispose()

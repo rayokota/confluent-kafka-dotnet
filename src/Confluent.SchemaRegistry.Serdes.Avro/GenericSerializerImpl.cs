@@ -189,13 +189,15 @@ namespace Confluent.SchemaRegistry.Serdes
 
                 if (latestSchema != null)
                 {
-                    FieldTransformer fieldTransformer = (ctx, transform, message) => 
+                    FieldTransformer fieldTransformer = async (ctx, transform, message) => 
                     {
                         var schema = Avro.Schema.Parse(ctx.Target.SchemaString);
-                        return AvroUtils.Transform(ctx, schema, message, transform);
+                        return await AvroUtils.Transform(ctx, schema, message, transform).ConfigureAwait(false);
                     };
-                    data = (GenericRecord)SerdeUtils.ExecuteRules(isKey, subject, topic, headers, RuleMode.Write, null,
-                        latestSchema, data, fieldTransformer);
+                    data = await SerdeUtils.ExecuteRules(isKey, subject, topic, headers, RuleMode.Write, null,
+                        latestSchema, data, fieldTransformer)
+                        .ContinueWith(t => (GenericRecord)t.Result)
+                        .ConfigureAwait(continueOnCapturedContext: false);
                 }
 
                 using (var stream = new MemoryStream(initialBufferSize))

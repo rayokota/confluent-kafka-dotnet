@@ -24,13 +24,14 @@ namespace Confluent.SchemaRegistry.Rules
         public string Type() => RuleType;
 
 
-        public object Transform(RuleContext ctx, object message)
+        public Task<object> Transform(RuleContext ctx, object message)
         {
             // TODO cache
             JToken jsonObj = JsonataExtensions.FromNewtonsoft((Newtonsoft.Json.Linq.JToken)message);
             JsonataQuery query = new JsonataQuery(ctx.Rule.Expr);
-            JToken result = query.Eval(jsonObj);
-            return JsonataExtensions.ToNewtonsoft(result);
+            JToken jtoken = query.Eval(jsonObj);
+            object result = JsonataExtensions.ToNewtonsoft(jtoken);
+            return Task.FromResult(result);
         }
 
         public void Dispose()

@@ -19,6 +19,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
@@ -33,7 +34,7 @@ namespace Confluent.SchemaRegistry.Serdes
     /// </summary>
     public static class JsonUtils
     {
-        public static object Transform(RuleContext ctx, JsonSchema schema, string path, object message,
+        public static async Task<object> Transform(RuleContext ctx, JsonSchema schema, string path, object message,
             IFieldTransform fieldTransform)
         {
             if (schema == null || message == null)
@@ -56,7 +57,7 @@ namespace Confluent.SchemaRegistry.Serdes
                     var errors = validator.Validate(jsonObject, subschema);
                     if (errors.Count == 0)
                     {
-                        return Transform(ctx, subschema, path, message, fieldTransform);
+                        return await Transform(ctx, subschema, path, message, fieldTransform).ConfigureAwait(false);
                     }
                 }
 
@@ -86,7 +87,7 @@ namespace Confluent.SchemaRegistry.Serdes
                     {
                         FieldAccessor fieldAccessor = new FieldAccessor(message.GetType(), it.Key);
                         object value = fieldAccessor.GetFieldValue(message);
-                        object newValue = Transform(ctx, it.Value, fullName, value, fieldTransform);
+                        object newValue = await Transform(ctx, it.Value, fullName, value, fieldTransform).ConfigureAwait(false);
                         if (ctx.Rule.Kind == RuleKind.Condition)
                         {
                             if (newValue is bool b && !b)
@@ -105,7 +106,7 @@ namespace Confluent.SchemaRegistry.Serdes
             }
             else if (schema.HasReference)
             {
-                return Transform(ctx, schema.ActualTypeSchema, path, message, fieldTransform);
+                return await Transform(ctx, schema.ActualTypeSchema, path, message, fieldTransform).ConfigureAwait(false);
             }
             else
             {
@@ -122,7 +123,8 @@ namespace Confluent.SchemaRegistry.Serdes
                             intersect.IntersectWith(ctx.Rule.Tags);
                             if (intersect.Count != 0)
                             {
-                                return fieldTransform.Transform(ctx, fieldContext, message);
+                                return await fieldTransform.Transform(ctx, fieldContext, message)
+                                    .ConfigureAwait(continueOnCapturedContext: false);
                             }
                             break;
                         case JsonObjectType.Null:

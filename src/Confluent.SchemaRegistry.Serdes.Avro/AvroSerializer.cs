@@ -152,7 +152,7 @@ namespace Confluent.SchemaRegistry.Serdes
         ///     <paramref name="value" /> serialized as a byte array.
         /// </returns>
         public async Task<byte[]> SerializeAsync(T value, SerializationContext context)
-        { 
+        {
             try
             {
                 // null needs to treated specially since the client most likely just wants to send
@@ -168,11 +168,16 @@ namespace Confluent.SchemaRegistry.Serdes
                 if (serializerImpl == null)
                 {
                     serializerImpl = typeof(T) == typeof(GenericRecord)
-                        ? (IAvroSerializerImpl<T>)new GenericSerializerImpl(schemaRegistryClient, autoRegisterSchema, normalizeSchemas, useLatestVersion, useLatestWithMetadata, initialBufferSize, subjectNameStrategy)
-                        : new SpecificSerializerImpl<T>(schemaRegistryClient, autoRegisterSchema, normalizeSchemas, useLatestVersion, useLatestWithMetadata, initialBufferSize, subjectNameStrategy);
+                        ? (IAvroSerializerImpl<T>)new GenericSerializerImpl(schemaRegistryClient, autoRegisterSchema,
+                            normalizeSchemas, useLatestVersion, useLatestWithMetadata, initialBufferSize,
+                            subjectNameStrategy)
+                        : new SpecificSerializerImpl<T>(schemaRegistryClient, autoRegisterSchema, normalizeSchemas,
+                            useLatestVersion, useLatestWithMetadata, initialBufferSize, subjectNameStrategy);
                 }
 
-                return await serializerImpl.Serialize(context.Topic, context.Headers, value, context.Component == MessageComponentType.Key).ConfigureAwait(continueOnCapturedContext: false);
+                return await serializerImpl.Serialize(context.Topic, context.Headers, value,
+                        context.Component == MessageComponentType.Key)
+                    .ConfigureAwait(continueOnCapturedContext: false);
             }
             catch (AggregateException e)
             {

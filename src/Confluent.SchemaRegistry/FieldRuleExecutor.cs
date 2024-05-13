@@ -15,6 +15,7 @@
 // Refer to LICENSE for more information.
 
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace Confluent.SchemaRegistry
 {
@@ -26,11 +27,12 @@ namespace Confluent.SchemaRegistry
 
         protected abstract IFieldTransform newTransform(RuleContext ctx);
 
-        public object Transform(RuleContext ctx, object message)
+        public async Task<object> Transform(RuleContext ctx, object message)
         {
             using (IFieldTransform transform = newTransform(ctx))
             {
-                return ctx.FieldTransformer.Invoke(ctx, transform, message);
+                return await ctx.FieldTransformer.Invoke(ctx, transform, message)
+                    .ConfigureAwait(continueOnCapturedContext: false);
             }
         }
 

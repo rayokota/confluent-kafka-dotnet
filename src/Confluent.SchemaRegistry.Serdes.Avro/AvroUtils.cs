@@ -17,6 +17,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Avro;
 using Avro.Generic;
 using Avro.Specific;
@@ -30,7 +31,7 @@ namespace Confluent.SchemaRegistry.Serdes
     /// </summary>
     public static class AvroUtils
     {
-        public static object Transform(RuleContext ctx, Avro.Schema schema, object message,
+        public static async Task<object> Transform(RuleContext ctx, Avro.Schema schema, object message,
             IFieldTransform fieldTransform)
         {
             if (schema == null || message == null)
@@ -51,11 +52,11 @@ namespace Confluent.SchemaRegistry.Serdes
                     writer = GetResolver(schema, message);
                     UnionSchema us = (UnionSchema)schema;
                     int unionIndex = writer.Resolve(us, message);
-                    return Transform(ctx, us[unionIndex], message, fieldTransform);
+                    return await Transform(ctx, us[unionIndex], message, fieldTransform).ConfigureAwait(false);
                 case Avro.Schema.Type.Array:
                     ArraySchema a = (ArraySchema)schema;
                     return ((IList<object>)message)
-                        .Select(it => Transform(ctx, a.ItemSchema, it, fieldTransform))
+                        .Select(it => Transform(ctx, a.ItemSchema, it, fieldTransform).ConfigureAwait(false))
                         .ToList();
                 case Avro.Schema.Type.Map:
                     MapSchema ms = (MapSchema)schema;
@@ -75,7 +76,7 @@ namespace Confluent.SchemaRegistry.Serdes
                             {
                                 ISpecificRecord specificRecord = (ISpecificRecord)message;
                                 object value = specificRecord.Get(f.Pos);
-                                object newValue = Transform(ctx, f.Schema, value, fieldTransform);
+                                object newValue = await Transform(ctx, f.Schema, value, fieldTransform).ConfigureAwait(false);
                                 if (ctx.Rule.Kind == RuleKind.Condition)
                                 {
                                     if (newValue is bool b && !b)
@@ -91,7 +92,7 @@ namespace Confluent.SchemaRegistry.Serdes
                             {
                                 GenericRecord genericRecord = (GenericRecord)message;
                                 object value = genericRecord.GetValue(f.Pos);
-                                object newValue = Transform(ctx, f.Schema, value, fieldTransform);
+                                object newValue = await Transform(ctx, f.Schema, value, fieldTransform).ConfigureAwait(false);
                                 if (ctx.Rule.Kind == RuleKind.Condition)
                                 {
                                     if (newValue is bool b && !b)
@@ -119,7 +120,8 @@ namespace Confluent.SchemaRegistry.Serdes
                         intersect.IntersectWith(ctx.Rule.Tags);
                         if (intersect.Count != 0)
                         {
-                            return fieldTransform.Transform(ctx, fieldContext, message);
+                            return await fieldTransform.Transform(ctx, fieldContext, message)
+                                .ConfigureAwait(continueOnCapturedContext: false);
                         }
                     }
 

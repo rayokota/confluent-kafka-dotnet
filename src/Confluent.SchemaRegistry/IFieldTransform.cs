@@ -16,15 +16,16 @@
 
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace Confluent.SchemaRegistry
 {
-    public delegate object FieldTransformer(RuleContext ctx, IFieldTransform fieldTransform, object message);
+    public delegate Task<object> FieldTransformer(RuleContext ctx, IFieldTransform fieldTransform, object message);
 
     public interface IFieldTransform : IDisposable
     {
         void Init(RuleContext ctx);
         
-        object Transform(RuleContext ctx, RuleContext.FieldContext fieldCtx, object fieldValue);
+        Task<object> Transform(RuleContext ctx, RuleContext.FieldContext fieldCtx, object fieldValue);
     }
 }

@@ -201,7 +201,9 @@ namespace Confluent.SchemaRegistry.Serdes
                         }
                         
                         Newtonsoft.Json.Linq.JToken json = Newtonsoft.Json.Linq.JToken.Parse(jsonString);
-                        json = (Newtonsoft.Json.Linq.JToken) SerdeUtils.ExecuteMigrations(migrations, isKey, subject, topic, headers, json);
+                        json = await SerdeUtils.ExecuteMigrations(migrations, isKey, subject, topic, headers, json)
+                            .ContinueWith(t => (Newtonsoft.Json.Linq.JToken)t.Result)
+                            .ConfigureAwait(continueOnCapturedContext: false);
                         Avro.IO.Decoder decoder = new JsonDecoder(writerSchema, json.ToString(Formatting.None));
                         data = Read(datumReader, decoder);
                     }
@@ -211,13 +213,14 @@ namespace Confluent.SchemaRegistry.Serdes
                     }
                 }
 
-                FieldTransformer fieldTransformer = (ctx, transform, message) => 
+                FieldTransformer fieldTransformer = async (ctx, transform, message) => 
                 {
                     var schema = Avro.Schema.Parse(ctx.Target.SchemaString);
-                    return AvroUtils.Transform(ctx, schema, message, transform);
+                    return await AvroUtils.Transform(ctx, schema, message, transform).ConfigureAwait(false);
                 };
-                data = SerdeUtils.ExecuteRules(isKey, subject, topic, headers, RuleMode.Read, null,
-                    writerSchemaJson, data, fieldTransformer);
+                data = await SerdeUtils.ExecuteRules(isKey, subject, topic, headers, RuleMode.Read, null,
+                    writerSchemaJson, data, fieldTransformer)
+                    .ConfigureAwait(continueOnCapturedContext: false);
 
                 return (T) data;
             }

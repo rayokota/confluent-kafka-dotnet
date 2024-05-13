@@ -22,6 +22,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Threading.Tasks;
 using Confluent.SchemaRegistry.Serdes.Protobuf;
 using Google.Protobuf;
 using Google.Protobuf.Reflection;
@@ -81,7 +82,7 @@ namespace Confluent.SchemaRegistry.Serdes
             return streamReader.ReadToEnd();
         }
 
-        public static object Transform(RuleContext ctx, object desc, object message,
+        public static async Task<object> Transform(RuleContext ctx, object desc, object message,
             IFieldTransform fieldTransform)
         {
             if (desc == null || message == null)
@@ -127,7 +128,7 @@ namespace Confluent.SchemaRegistry.Serdes
                             d = schemaFd.GetMessageType();
                         }
 
-                        object newValue = Transform(ctx, d, value, fieldTransform);
+                        object newValue = await Transform(ctx, d, value, fieldTransform).ConfigureAwait(false);
                         if (ctx.Rule.Kind == RuleKind.Condition)
                         {
                             if (newValue is bool b && !b)
@@ -152,7 +153,8 @@ namespace Confluent.SchemaRegistry.Serdes
                     intersect.IntersectWith(ctx.Rule.Tags);
                     if (intersect.Count != 0)
                     {
-                        return fieldTransform.Transform(ctx, fieldContext, message);
+                        return await fieldTransform.Transform(ctx, fieldContext, message)
+                            .ConfigureAwait(continueOnCapturedContext: false);
                     }
                 }
 

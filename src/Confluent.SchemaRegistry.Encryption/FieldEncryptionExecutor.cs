@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace Confluent.SchemaRegistry.Encryption
 {
@@ -95,7 +96,7 @@ namespace Confluent.SchemaRegistry.Encryption
                 case RuleContext.Type.Bytes:
                     return (byte[])obj;
                 case RuleContext.Type.String:
-                    return Encoding.UTF8.GetBytes(obj.ToString());
+                    return Encoding.UTF8.GetBytes(obj.ToString()!);
                 default:
                     return null;
             }
@@ -125,27 +126,26 @@ namespace Confluent.SchemaRegistry.Encryption
 
     public class FieldEncryptionExecutorTransform : IFieldTransform
     {
-        
-        public FieldEncryptionExecutor Executor { get; private set; }
-        public Cryptor Cryptor { get; private set; }
-        public string KekName { get; private set; }
-        public RegisteredKek Kek { get; private set; }
-        public int DekExpiryDays { get; private set; }
+
+        private FieldEncryptionExecutor executor;
+        private Cryptor cryptor;
+        private string kekName;
+        private RegisteredKek registeredKek;
+        private int dekExpiryDays;
 
         public FieldEncryptionExecutorTransform(FieldEncryptionExecutor executor)
         {
-            Executor = executor;
+            this.executor = executor;
         }
         
         public void Init(RuleContext ctx)
         {
-            Cryptor = Executor.GetCryptor(ctx);
-            KekName = GetKekName(ctx);
-            Kek = GetOrCreateKek(ctx);
-            DekExpiryDays = GetDekExpiryDays(ctx);
+            cryptor = executor.GetCryptor(ctx);
+            kekName = GetKekName(ctx);
+            dekExpiryDays = GetDekExpiryDays(ctx);
         }
 
-        public bool IsDekRotated() => DekExpiryDays > 0;
+        public bool IsDekRotated() => dekExpiryDays > 0;
 
         private string GetKekName(RuleContext ctx)
         {
@@ -157,50 +157,62 @@ namespace Confluent.SchemaRegistry.Encryption
 
             return name;
         }
+
+        private async Task<RegisteredKek> GetKek(RuleContext ctx)
+        {
+            if (registeredKek == null)
+            {
+                registeredKek = await GetOrCreateKek(ctx).ConfigureAwait(continueOnCapturedContext: false);
+            }
+
+            return registeredKek;
+        }
         
-        private RegisteredKek GetOrCreateKek(RuleContext ctx)
+        private async Task<RegisteredKek> GetOrCreateKek(RuleContext ctx)
         {
             bool isRead = ctx.RuleMode == RuleMode.Read;
-            KekId kekId = new KekId(KekName, isRead);
+            KekId kekId = new KekId(kekName, isRead);
 
             string kmsType = ctx.GetParameter(FieldEncryptionExecutor.EncryptKmsType);
             string kmsKeyId = ctx.GetParameter(FieldEncryptionExecutor.EncryptKmsKeyid);
 
-            RegisteredKek kek = RetrieveKekFromRegistry(kekId);
+            RegisteredKek kek = await RetrieveKekFromRegistry(kekId).ConfigureAwait(continueOnCapturedContext: false);
             if (kek == null)
             {
                 if (isRead)
                 {
-                    throw new RuleException($"No kek found for name {KekName} during consume");
+                    throw new RuleException($"No kek found for name {kekName} during consume");
                 }
                 if (String.IsNullOrEmpty(kmsType))
                 {
-                    throw new RuleException($"No kms type found for {KekName} during produce");
+                    throw new RuleException($"No kms type found for {kekName} during produce");
                 }
                 if (String.IsNullOrEmpty(kmsKeyId))
                 {
-                    throw new RuleException($"No kms key id found for {KekName} during produce");
+                    throw new RuleException($"No kms key id found for {kekName} during produce");
                 }
 
-                kek = StoreKekToRegistry(kekId, kmsType, kmsKeyId, false);
+                kek = await StoreKekToRegistry(kekId, kmsType, kmsKeyId, false)
+                    .ConfigureAwait(continueOnCapturedContext: false);
                 if (kek == null)
                 {
                     // Handle conflicts (409)
-                    kek = RetrieveKekFromRegistry(kekId);
+                    kek = await RetrieveKekFromRegistry(kekId)
+                        .ConfigureAwait(continueOnCapturedContext: false);
                 }
 
                 if (kek == null)
                 {
-                    throw new RuleException($"No kek found for {KekName} during produce");
+                    throw new RuleException($"No kek found for {kekName} during produce");
                 }
             }
             if (!String.IsNullOrEmpty(kmsType) && !kmsType.Equals(kek.KmsType))
             {
-                throw new RuleException($"Found {KekName} with kms type {kek.KmsType} but expected {kmsType}");
+                throw new RuleException($"Found {kekName} with kms type {kek.KmsType} but expected {kmsType}");
             }
             if (!String.IsNullOrEmpty(kmsKeyId) && !kmsKeyId.Equals(kek.KmsKeyId))
             {
-                throw new RuleException($"Found {KekName} with kms key id {kek.KmsKeyId} but expected {kmsKeyId}");
+                throw new RuleException($"Found {kekName} with kms key id {kek.KmsKeyId} but expected {kmsKeyId}");
             }
 
             return kek;
@@ -224,14 +236,12 @@ namespace Confluent.SchemaRegistry.Encryption
             return days;
         }
         
-        private RegisteredKek RetrieveKekFromRegistry(KekId key)
+        private async Task<RegisteredKek> RetrieveKekFromRegistry(KekId key)
         {
             try
             {
-                return Executor.Client.GetKekAsync(key.Name, !key.LookupDeletedKeks)
-                    .ConfigureAwait(continueOnCapturedContext: false)
-                    .GetAwaiter()
-                    .GetResult();
+                return await executor.Client.GetKekAsync(key.Name, !key.LookupDeletedKeks)
+                    .ConfigureAwait(continueOnCapturedContext: false);
             }
             catch (SchemaRegistryException e)
             {
@@ -244,7 +254,7 @@ namespace Confluent.SchemaRegistry.Encryption
             }
         }
         
-        private RegisteredKek StoreKekToRegistry(KekId key, string kmsType, string kmsKeyId, bool shared)
+        private async Task<RegisteredKek> StoreKekToRegistry(KekId key, string kmsType, string kmsKeyId, bool shared)
         {
             Kek kek = new Kek
             {
@@ -255,10 +265,8 @@ namespace Confluent.SchemaRegistry.Encryption
             };
             try
             {
-                return Executor.Client.CreateKekAsync(kek)
-                    .ConfigureAwait(continueOnCapturedContext: false)
-                    .GetAwaiter()
-                    .GetResult();
+                return await executor.Client.CreateKekAsync(kek)
+                    .ConfigureAwait(continueOnCapturedContext: false);
             }
             catch (SchemaRegistryException e)
             {
@@ -271,45 +279,44 @@ namespace Confluent.SchemaRegistry.Encryption
             }
         }
         
-        private RegisteredDek GetOrCreateDek(RuleContext ctx, int? version)
+        private async Task<RegisteredDek> GetOrCreateDek(RuleContext ctx, int? version)
         {
+            RegisteredKek kek = await GetKek(ctx).ConfigureAwait(continueOnCapturedContext: false);
             bool isRead = ctx.RuleMode == RuleMode.Read;
-            DekId dekId = new DekId(KekName, ctx.Subject, version, Cryptor.DekFormat, isRead);
+            DekId dekId = new DekId(kekName, ctx.Subject, version, cryptor.DekFormat, isRead);
 
             IKmsClient kmsClient = null;
-            RegisteredDek dek = RetrieveDekFromRegistry(dekId);
+            RegisteredDek dek = await RetrieveDekFromRegistry(dekId).ConfigureAwait(continueOnCapturedContext: false);
             bool isExpired = IsExpired(ctx, dek);
             if (dek == null || isExpired)
             {
                 if (isRead)
                 {
-                    throw new RuleException($"No dek found for {KekName} during consume");
+                    throw new RuleException($"No dek found for {kekName} during consume");
                 }
 
                 byte[] encryptedDek = null;
-                if (!Kek.Shared)
+                if (!kek.Shared)
                 {
-                    kmsClient = GetKmsClient(Executor.Configs, Kek);
+                    kmsClient = GetKmsClient(executor.Configs, kek);
                     // Generate new dek
-                    byte[] rawDek = Cryptor.GenerateKey();
-                    encryptedDek = kmsClient.Encrypt(rawDek)
-                        .ConfigureAwait(continueOnCapturedContext: false)
-                        .GetAwaiter()
-                        .GetResult();
+                    byte[] rawDek = cryptor.GenerateKey();
+                    encryptedDek = await kmsClient.Encrypt(rawDek)
+                        .ConfigureAwait(continueOnCapturedContext: false);
                 }
 
                 int? newVersion = isExpired ? dek.Version : null;
-                DekId newDekId = new DekId(KekName, ctx.Subject, newVersion, Cryptor.DekFormat, isRead);
-                dek = StoreDekToRegistry(newDekId, encryptedDek);
+                DekId newDekId = new DekId(kekName, ctx.Subject, newVersion, cryptor.DekFormat, isRead);
+                dek = await StoreDekToRegistry(newDekId, encryptedDek).ConfigureAwait(continueOnCapturedContext: false);
                 if (dek == null)
                 {
                     // Handle conflicts (409)
-                    dek = RetrieveDekFromRegistry(dekId);
+                    dek = await RetrieveDekFromRegistry(dekId).ConfigureAwait(continueOnCapturedContext: false);
                 }
 
                 if (dek == null)
                 {
-                    throw new RuleException($"No dek found for {KekName} during produce");
+                    throw new RuleException($"No dek found for {kekName} during produce");
                 }
             }
 
@@ -317,13 +324,11 @@ namespace Confluent.SchemaRegistry.Encryption
             {
                 if (kmsClient == null)
                 {
-                    kmsClient = GetKmsClient(Executor.Configs, Kek);
+                    kmsClient = GetKmsClient(executor.Configs, kek);
                 }
 
-                byte[] rawDek = kmsClient.Decrypt(dek.EncryptedKeyMaterialBytes)
-                    .ConfigureAwait(continueOnCapturedContext: false)
-                    .GetAwaiter()
-                    .GetResult();
+                byte[] rawDek = await kmsClient.Decrypt(dek.EncryptedKeyMaterialBytes)
+                    .ConfigureAwait(continueOnCapturedContext: false);
                 dek.SetKeyMaterial(rawDek);
 
             }
@@ -334,30 +339,28 @@ namespace Confluent.SchemaRegistry.Encryption
         private bool IsExpired(RuleContext ctx, RegisteredDek dek)
         {
             return ctx.RuleMode != RuleMode.Read
-                && DekExpiryDays > 0
+                && dekExpiryDays > 0
                 && dek != null
-                && (DateTimeOffset.Now.ToUnixTimeMilliseconds() - dek.Timestamp) / FieldEncryptionExecutor.MillisInDay > DekExpiryDays;
+                && (DateTimeOffset.Now.ToUnixTimeMilliseconds() - dek.Timestamp) / FieldEncryptionExecutor.MillisInDay > dekExpiryDays;
         }
         
-        private RegisteredDek RetrieveDekFromRegistry(DekId key)
+        private async Task<RegisteredDek> RetrieveDekFromRegistry(DekId key)
         {
             try
             {
                 RegisteredDek dek;
                 if (key.Version != null)
                 {
-                    dek = Executor.Client.GetDekVersionAsync(key.KekName, key.Subject, key.Version.Value, key.DekFormat, !key.LookupDeletedDeks)
-                        .ConfigureAwait(continueOnCapturedContext: false)
-                        .GetAwaiter()
-                        .GetResult();
-                    
+                    dek = await executor.Client.GetDekVersionAsync(key.KekName, key.Subject, key.Version.Value, key.DekFormat,
+                            !key.LookupDeletedDeks)
+                        .ConfigureAwait(continueOnCapturedContext: false);
+
                 }
                 else
                 {
-                    dek = Executor.Client.GetDekAsync(key.KekName, key.Subject, key.DekFormat, !key.LookupDeletedDeks)
-                        .ConfigureAwait(continueOnCapturedContext: false)
-                        .GetAwaiter()
-                        .GetResult();
+                    dek = await executor.Client
+                        .GetDekAsync(key.KekName, key.Subject, key.DekFormat, !key.LookupDeletedDeks)
+                        .ConfigureAwait(continueOnCapturedContext: false);
                 }
 
                 return dek?.EncryptedKeyMaterial != null ? dek : null;
@@ -373,7 +376,7 @@ namespace Confluent.SchemaRegistry.Encryption
             }
         }
         
-        private RegisteredDek StoreDekToRegistry(DekId key, byte[] encryptedDek)
+        private async Task<RegisteredDek> StoreDekToRegistry(DekId key, byte[] encryptedDek)
         {
 
             string encryptedDekStr = encryptedDek != null ? Convert.ToBase64String(encryptedDek) : null;
@@ -386,10 +389,8 @@ namespace Confluent.SchemaRegistry.Encryption
             };
             try
             {
-                return Executor.Client.CreateDekAsync(key.KekName, dek)
-                    .ConfigureAwait(continueOnCapturedContext: false)
-                    .GetAwaiter()
-                    .GetResult();
+                return await executor.Client.CreateDekAsync(key.KekName, dek)
+                    .ConfigureAwait(continueOnCapturedContext: false);
             }
             catch (SchemaRegistryException e)
             {
@@ -402,7 +403,7 @@ namespace Confluent.SchemaRegistry.Encryption
             }
         }
 
-        public object Transform(RuleContext ctx, RuleContext.FieldContext fieldCtx, object fieldValue)
+        public async Task<object> Transform(RuleContext ctx, RuleContext.FieldContext fieldCtx, object fieldValue)
         {
             if (fieldValue == null)
             {
@@ -422,8 +423,9 @@ namespace Confluent.SchemaRegistry.Encryption
                     }
 
 
-                    dek = GetOrCreateDek(ctx, IsDekRotated() ? FieldEncryptionExecutor.LatestVersion : null);
-                    ciphertext = Cryptor.Encrypt(dek.KeyMaterialBytes, plaintext);
+                    dek = await GetOrCreateDek(ctx, IsDekRotated() ? FieldEncryptionExecutor.LatestVersion : null)
+                        .ConfigureAwait(continueOnCapturedContext: false);
+                    ciphertext = cryptor.Encrypt(dek.KeyMaterialBytes, plaintext);
                     if (IsDekRotated())
                     {
                         ciphertext = PrefixVersion(dek.Version.Value, ciphertext);
@@ -460,8 +462,8 @@ namespace Confluent.SchemaRegistry.Encryption
                         ciphertext = kv.Item2;
                     }
 
-                    dek = GetOrCreateDek(ctx, version);
-                    plaintext = Cryptor.Decrypt(dek.KeyMaterialBytes, ciphertext);
+                    dek = await GetOrCreateDek(ctx, version).ConfigureAwait(continueOnCapturedContext: false);
+                    plaintext = cryptor.Decrypt(dek.KeyMaterialBytes, ciphertext);
                     return FieldEncryptionExecutor.ToObject(fieldCtx.Type, plaintext);
                 default:
                     throw new ArgumentException("Unsupported rule mode " + ctx.RuleMode);

@@ -15,6 +15,7 @@
 // Refer to LICENSE for more information.
 
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace Confluent.SchemaRegistry
 {
@@ -34,7 +35,7 @@ namespace Confluent.SchemaRegistry
             return ActionType;
         }
         
-        public void Run(RuleContext ctx, object message, RuleException exception = null)
+        public Task Run(RuleContext ctx, object message, RuleException exception = null)
         {
             throw exception;
         }

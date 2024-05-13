@@ -200,7 +200,7 @@ namespace Confluent.SchemaRegistry
             return null;
         }
         
-        public static object ExecuteMigrations(
+        public static async Task<object> ExecuteMigrations(
             IList<Migration> migrations, 
             bool isKey,
             String subject, 
@@ -210,8 +210,8 @@ namespace Confluent.SchemaRegistry
         {
             foreach (Migration m in migrations)
             {
-                message = ExecuteRules(isKey, subject, topic, headers, m.RuleMode,
-                    m.Source, m.Target, message, null);
+                message = await ExecuteRules(isKey, subject, topic, headers, m.RuleMode,
+                    m.Source, m.Target, message, null).ConfigureAwait(continueOnCapturedContext: false);
             }
             return message;
         }
@@ -232,7 +232,7 @@ namespace Confluent.SchemaRegistry
         /// <returns></returns>
         /// <exception cref="RuleConditionException"></exception>
         /// <exception cref="ArgumentException"></exception>
-        public static object ExecuteRules(
+        public static async Task<object> ExecuteRules(
             bool isKey, 
             string subject, 
             string topic, 
@@ -305,7 +305,8 @@ namespace Confluent.SchemaRegistry
                 {
                     try
                     {
-                        object result = ruleExecutor.Transform(ctx, message);
+                        object result = await ruleExecutor.Transform(ctx, message)
+                            .ConfigureAwait(continueOnCapturedContext: false);
                         switch (rule.Kind)
                         {
                             case RuleKind.Condition:
@@ -321,25 +322,28 @@ namespace Confluent.SchemaRegistry
                             default:
                                 throw new ArgumentException("Unsupported rule kind " + rule.Kind);
                         }
-                        RunAction(ctx, ruleMode, rule, message != null ? rule.OnSuccess : rule.OnFailure,
-                            message, null, message != null ? null : ErrorAction.ActionType);
+                        await RunAction(ctx, ruleMode, rule, message != null ? rule.OnSuccess : rule.OnFailure,
+                            message, null, message != null ? null : ErrorAction.ActionType)
+                            .ConfigureAwait(continueOnCapturedContext: false);
                     }
                     catch (RuleException ex)
                     {
-                        RunAction(ctx, ruleMode, rule, rule.OnFailure, message, 
-                            ex, ErrorAction.ActionType);
+                        await RunAction(ctx, ruleMode, rule, rule.OnFailure, message, 
+                            ex, ErrorAction.ActionType)
+                            .ConfigureAwait(continueOnCapturedContext: false);
                     }
                 }
                 else
                 {
-                    RunAction(ctx, ruleMode, rule, rule.OnFailure, message, 
-                        new RuleException("Could not find rule executor of type " + rule.Type), ErrorAction.ActionType);
+                    await RunAction(ctx, ruleMode, rule, rule.OnFailure, message, 
+                        new RuleException("Could not find rule executor of type " + rule.Type), ErrorAction.ActionType)
+                        .ConfigureAwait(continueOnCapturedContext: false);
                 }
             }
             return message;
         }
 
-        private static void RunAction(RuleContext ctx, RuleMode ruleMode, 
+        private static async Task RunAction(RuleContext ctx, RuleMode ruleMode, 
             Rule rule, string action, object message, RuleException ex, string defaultAction)
         {
             string actionName = GetRuleActionName(rule, ruleMode, action);
@@ -357,7 +361,7 @@ namespace Confluent.SchemaRegistry
 
                 try
                 {
-                    ruleAction.Run(ctx, message, ex);
+                    await ruleAction.Run(ctx, message, ex).ConfigureAwait(continueOnCapturedContext: false);
                 } catch (RuleException e)
                 {
                     throw new SerializationException("Failed to run rule action " + actionName, e);

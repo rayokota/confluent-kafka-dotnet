@@ -14,6 +14,8 @@
 //
 // Refer to LICENSE for more information.
 
+using System.Threading.Tasks;
+
 namespace Confluent.SchemaRegistry
 {
     /// <summary>
@@ -27,6 +29,6 @@ namespace Confluent.SchemaRegistry
         /// <param name="ctx"></param>
         /// <param name="message"></param>
         /// <returns></returns>
-        object Transform(RuleContext ctx, object message);
+        Task<object> Transform(RuleContext ctx, object message);
     }
 }

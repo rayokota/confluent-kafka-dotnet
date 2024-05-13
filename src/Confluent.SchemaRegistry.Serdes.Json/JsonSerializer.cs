@@ -207,12 +207,15 @@ namespace Confluent.SchemaRegistry.Serdes
                 if (latestSchema != null)
                 {
                     var laterSchemaJson = await JsonSchema.FromJsonAsync(latestSchema).ConfigureAwait(false);
-                    FieldTransformer fieldTransformer = (ctx, transform, message) =>
+                    FieldTransformer fieldTransformer = async (ctx, transform, message) =>
                     {
-                        return JsonUtils.Transform(ctx, laterSchemaJson, "$", message, transform);
+                        return await JsonUtils.Transform(ctx, laterSchemaJson, "$", message, transform).ConfigureAwait(false);
                     };
-                    value = (T)SerdeUtils.ExecuteRules(context.Component == MessageComponentType.Key, subject, context.Topic, context.Headers, RuleMode.Write, null,
-                        latestSchema, value, fieldTransformer);
+                    value = await SerdeUtils.ExecuteRules(context.Component == MessageComponentType.Key, subject,
+                            context.Topic, context.Headers, RuleMode.Write, null,
+                            latestSchema, value, fieldTransformer)
+                        .ContinueWith(t => (T)t.Result)
+                        .ConfigureAwait(continueOnCapturedContext: false);
                 }
 
                 var serializedString = Newtonsoft.Json.JsonConvert.SerializeObject(value, this.jsonSchemaGeneratorSettings?.ActualSerializerSettings);
