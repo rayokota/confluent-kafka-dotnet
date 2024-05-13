@@ -96,8 +96,11 @@ namespace Confluent.SchemaRegistry.Serdes
                 (message.GetType().GetGenericTypeDefinition().IsAssignableFrom(typeof(List<>)) ||
                  message.GetType().GetGenericTypeDefinition().IsAssignableFrom(typeof(IList<>))))
             {
-                IList<object> list = (IList<object>)message;
-                return list.Select(it => Transform(ctx, desc, it, fieldTransform)).ToList();
+                var tasks = ((IList<object>)message)
+                    .Select(it => Transform(ctx, desc, it, fieldTransform))
+                    .ToList();
+                await Task.WhenAll(tasks).ConfigureAwait(false);
+                return tasks.Select(t => t.Result).ToList();
             }
             else if (message.GetType().IsGenericType &&
                      (message.GetType().GetGenericTypeDefinition().IsAssignableFrom(typeof(Dictionary<,>)) ||

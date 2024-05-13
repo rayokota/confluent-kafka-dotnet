@@ -167,7 +167,7 @@ namespace Confluent.SchemaRegistry
             for (int i = version1 + 1; i < version2; i++) {
                 tasks.Add(client.GetRegisteredSchemaAsync(subject, i));
             }
-            await Task.WhenAll(tasks.ToArray()).ConfigureAwait(continueOnCapturedContext: false);
+            await Task.WhenAll(tasks).ConfigureAwait(continueOnCapturedContext: false);
 
             var schemas = new List<Schema>();
             schemas.Add(first);
@@ -219,8 +219,6 @@ namespace Confluent.SchemaRegistry
         /// <summary>
         ///     Execute rules 
         /// </summary>
-        /// <param name="ruleExecutors"></param>
-        /// <param name="ruleActions"></param>
         /// <param name="isKey"></param>
         /// <param name="subject"></param>
         /// <param name="topic"></param>
