@@ -123,8 +123,7 @@ namespace Confluent.SchemaRegistry.Serdes.UnitTests
                 });
             dekRegistryClient = dekRegistryMock.Object;
             
-            // Register rule executors and kms drivers
-            FieldEncryptionExecutor.Register(dekRegistryClient);
+            // Register kms drivers
             LocalKmsDriver.Register();
         }
 
@@ -231,8 +230,9 @@ namespace Confluent.SchemaRegistry.Serdes.UnitTests
                 UseLatestVersion = true
             };
             config.Set("rules.secret", "mysecret");
-            var serializer = new ProtobufSerializer<Person>(schemaRegistryClient, config);
-            var deserializer = new ProtobufDeserializer<Person>(schemaRegistryClient, null);
+            IRuleExecutor ruleExecutor = new FieldEncryptionExecutor(dekRegistryClient);
+            var serializer = new ProtobufSerializer<Person>(schemaRegistryClient, config, new List<IRuleExecutor>{ ruleExecutor});
+            var deserializer = new ProtobufDeserializer<Person>(schemaRegistryClient, null, new List<IRuleExecutor>{ ruleExecutor});
 
             var user = new Person
             {

@@ -8,7 +8,7 @@ namespace Confluent.SchemaRegistry.Rules
     {
         public static void Register()
         {
-            RuleRegistry.RegisterRuleExecutor(RuleType, new JsonataExecutor());
+            RuleRegistry.RegisterRuleExecutor(new JsonataExecutor());
         }
 
         public static readonly string RuleType = "JSONATA";

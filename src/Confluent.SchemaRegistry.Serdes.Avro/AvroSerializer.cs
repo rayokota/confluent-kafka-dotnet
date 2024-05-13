@@ -47,6 +47,7 @@ namespace Confluent.SchemaRegistry.Serdes
         private IAvroSerializerImpl<T> serializerImpl;
 
         private ISchemaRegistryClient schemaRegistryClient;
+        private IList<IRuleExecutor> ruleExecutors;
 
         /// <summary>
         ///     The default initial size (in bytes) of buffers used for message 
@@ -87,9 +88,10 @@ namespace Confluent.SchemaRegistry.Serdes
         ///     Serializer configuration properties (refer to 
         ///     <see cref="AvroSerializerConfig" />)
         /// </param>
-        public AvroSerializer(ISchemaRegistryClient schemaRegistryClient, AvroSerializerConfig config = null)
+        public AvroSerializer(ISchemaRegistryClient schemaRegistryClient, AvroSerializerConfig config = null, IList<IRuleExecutor> ruleExecutors = null)
         {
             this.schemaRegistryClient = schemaRegistryClient;
+            this.ruleExecutors = ruleExecutors ?? new List<IRuleExecutor>();
 
             if (config == null) { return; }
 
@@ -126,7 +128,7 @@ namespace Confluent.SchemaRegistry.Serdes
                 throw new ArgumentException($"AvroSerializer: cannot enable both use.latest.version and auto.register.schemas");
             }
 
-            foreach (IRuleExecutor executor in RuleRegistry.GetRuleExecutors())
+            foreach (IRuleExecutor executor in this.ruleExecutors.Concat(RuleRegistry.GetRuleExecutors()))
             {
                 IEnumerable<KeyValuePair<string, string>> ruleConfigs = config
                     .Select(kv => new KeyValuePair<string, string>(
@@ -170,9 +172,9 @@ namespace Confluent.SchemaRegistry.Serdes
                     serializerImpl = typeof(T) == typeof(GenericRecord)
                         ? (IAvroSerializerImpl<T>)new GenericSerializerImpl(schemaRegistryClient, autoRegisterSchema,
                             normalizeSchemas, useLatestVersion, useLatestWithMetadata, initialBufferSize,
-                            subjectNameStrategy)
+                            subjectNameStrategy, ruleExecutors)
                         : new SpecificSerializerImpl<T>(schemaRegistryClient, autoRegisterSchema, normalizeSchemas,
-                            useLatestVersion, useLatestWithMetadata, initialBufferSize, subjectNameStrategy);
+                            useLatestVersion, useLatestWithMetadata, initialBufferSize, subjectNameStrategy, ruleExecutors);
                 }
 
                 return await serializerImpl.Serialize(context.Topic, context.Headers, value,

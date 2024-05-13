@@ -65,6 +65,7 @@ namespace Confluent.SchemaRegistry.Serdes
         private SubjectNameStrategyDelegate subjectNameStrategy = null;
         private ISchemaRegistryClient schemaRegistryClient;
         private readonly JsonSchemaGeneratorSettings jsonSchemaGeneratorSettings;
+        private IList<IRuleExecutor> ruleExecutors;
         
         private HashSet<string> subjectsRegistered = new HashSet<string>();
         private SemaphoreSlim serializeMutex = new SemaphoreSlim(1);
@@ -94,10 +95,11 @@ namespace Confluent.SchemaRegistry.Serdes
         /// <param name="jsonSchemaGeneratorSettings">
         ///     JSON schema generator settings.
         /// </param>
-        public JsonSerializer(ISchemaRegistryClient schemaRegistryClient, JsonSerializerConfig config = null, JsonSchemaGeneratorSettings jsonSchemaGeneratorSettings = null)
+        public JsonSerializer(ISchemaRegistryClient schemaRegistryClient, JsonSerializerConfig config = null, JsonSchemaGeneratorSettings jsonSchemaGeneratorSettings = null, IList<IRuleExecutor> ruleExecutors = null)
         {
             this.schemaRegistryClient = schemaRegistryClient;
             this.jsonSchemaGeneratorSettings = jsonSchemaGeneratorSettings;
+            this.ruleExecutors = ruleExecutors ?? new List<IRuleExecutor>();
 
             this.schema = this.jsonSchemaGeneratorSettings == null
                 ? NJsonSchema.JsonSchema.FromType<T>()
@@ -126,7 +128,7 @@ namespace Confluent.SchemaRegistry.Serdes
                 throw new ArgumentException($"JsonSerializer: cannot enable both use.latest.version and auto.register.schemas");
             }
 
-            foreach (IRuleExecutor executor in RuleRegistry.GetRuleExecutors())
+            foreach (IRuleExecutor executor in this.ruleExecutors.Concat(RuleRegistry.GetRuleExecutors()))
             {
                 IEnumerable<KeyValuePair<string, string>> ruleConfigs = config
                     .Select(kv => new KeyValuePair<string, string>(
@@ -213,7 +215,7 @@ namespace Confluent.SchemaRegistry.Serdes
                     };
                     value = await SerdeUtils.ExecuteRules(context.Component == MessageComponentType.Key, subject,
                             context.Topic, context.Headers, RuleMode.Write, null,
-                            latestSchema, value, fieldTransformer)
+                            latestSchema, value, fieldTransformer, ruleExecutors)
                         .ContinueWith(t => (T)t.Result)
                         .ConfigureAwait(continueOnCapturedContext: false);
                 }

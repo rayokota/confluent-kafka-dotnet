@@ -6,7 +6,7 @@ namespace Confluent.SchemaRegistry.Rules
     {
         public static void Register()
         {
-            RuleRegistry.RegisterRuleExecutor(RuleType, new CelExecutor());
+            RuleRegistry.RegisterRuleExecutor(new CelExecutor());
         }
 
         public static readonly string RuleType = "CEL";

@@ -42,17 +42,20 @@ namespace Confluent.SchemaRegistry.Serdes
         private bool useLatestVersion;
         private IDictionary<string, string> useLatestWithMetadata;
         private SubjectNameStrategyDelegate subjectNameStrategy;
+        private IList<IRuleExecutor> ruleExecutors;
 
         public GenericDeserializerImpl(
             ISchemaRegistryClient schemaRegistryClient, 
             bool useLatestVersion, 
             IDictionary<string, string> useLatestWithMetadata, 
-            SubjectNameStrategyDelegate subjectNameStrategy)
+            SubjectNameStrategyDelegate subjectNameStrategy,
+            IList<IRuleExecutor> ruleExecutors)
         {
             this.schemaRegistryClient = schemaRegistryClient;
             this.useLatestVersion = useLatestVersion;
             this.useLatestWithMetadata = useLatestWithMetadata;
             this.subjectNameStrategy = subjectNameStrategy;
+            this.ruleExecutors = ruleExecutors;
         }
 
         public async Task<GenericRecord> Deserialize(string topic, Headers headers, byte[] array, bool isKey)
@@ -137,7 +140,7 @@ namespace Confluent.SchemaRegistry.Serdes
                     return await AvroUtils.Transform(ctx, schema, message, transform).ConfigureAwait(false);
                 };
                 data = await SerdeUtils.ExecuteRules(isKey, subject, topic, headers, RuleMode.Read, null,
-                    writerSchemaResult, data, fieldTransformer)
+                    writerSchemaResult, data, fieldTransformer, ruleExecutors)
                     .ContinueWith(t => (GenericRecord)t.Result)
                     .ConfigureAwait(continueOnCapturedContext: false);
 

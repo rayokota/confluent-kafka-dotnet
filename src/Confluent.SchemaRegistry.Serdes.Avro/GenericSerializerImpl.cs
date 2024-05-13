@@ -39,6 +39,7 @@ namespace Confluent.SchemaRegistry.Serdes
         private IDictionary<string, string> useLatestWithMetadata;
         private int initialBufferSize;
         private SubjectNameStrategyDelegate subjectNameStrategy;
+        private IList<IRuleExecutor> ruleExecutors;
 
         private Dictionary<global::Avro.RecordSchema, string> knownSchemas = new Dictionary<global::Avro.RecordSchema, string>();
         private HashSet<KeyValuePair<string, string>> registeredSchemas = new HashSet<KeyValuePair<string, string>>();
@@ -53,7 +54,8 @@ namespace Confluent.SchemaRegistry.Serdes
             bool useLatestVersion,
             IDictionary<string, string> useLatestWithMetadata,
             int initialBufferSize,
-            SubjectNameStrategyDelegate subjectNameStrategy)
+            SubjectNameStrategyDelegate subjectNameStrategy,
+            IList<IRuleExecutor> ruleExecutors)
         {
             this.schemaRegistryClient = schemaRegistryClient;
             this.autoRegisterSchema = autoRegisterSchema;
@@ -62,6 +64,7 @@ namespace Confluent.SchemaRegistry.Serdes
             this.useLatestWithMetadata = useLatestWithMetadata;
             this.initialBufferSize = initialBufferSize;
             this.subjectNameStrategy = subjectNameStrategy;
+            this.ruleExecutors = ruleExecutors;
         }
 
         /// <summary>
@@ -195,7 +198,7 @@ namespace Confluent.SchemaRegistry.Serdes
                         return await AvroUtils.Transform(ctx, schema, message, transform).ConfigureAwait(false);
                     };
                     data = await SerdeUtils.ExecuteRules(isKey, subject, topic, headers, RuleMode.Write, null,
-                        latestSchema, data, fieldTransformer)
+                        latestSchema, data, fieldTransformer, ruleExecutors)
                         .ContinueWith(t => (GenericRecord)t.Result)
                         .ConfigureAwait(continueOnCapturedContext: false);
                 }

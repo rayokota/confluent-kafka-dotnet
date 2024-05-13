@@ -62,6 +62,7 @@ namespace Confluent.SchemaRegistry.Serdes
         private SemaphoreSlim deserializeMutex = new SemaphoreSlim(1);
 
         private ISchemaRegistryClient schemaRegistryClient;
+        private IList<IRuleExecutor> ruleExecutors;
         
         private readonly JsonSchemaGeneratorSettings jsonSchemaGeneratorSettings;
 
@@ -85,10 +86,11 @@ namespace Confluent.SchemaRegistry.Serdes
         {
         }
 
-        public JsonDeserializer(ISchemaRegistryClient schemaRegistryClient, JsonDeserializerConfig config, JsonSchemaGeneratorSettings jsonSchemaGeneratorSettings = null)
+        public JsonDeserializer(ISchemaRegistryClient schemaRegistryClient, JsonDeserializerConfig config, JsonSchemaGeneratorSettings jsonSchemaGeneratorSettings = null, IList<IRuleExecutor> ruleExecutors = null)
         {
             this.schemaRegistryClient = schemaRegistryClient;
             this.jsonSchemaGeneratorSettings = jsonSchemaGeneratorSettings;
+            this.ruleExecutors = ruleExecutors ?? new List<IRuleExecutor>();
 
             if (config == null) { return; }
 
@@ -103,7 +105,7 @@ namespace Confluent.SchemaRegistry.Serdes
             if (config.UseLatestWithMetadata != null) { this.useLatestWithMetadata = config.UseLatestWithMetadata; }
             if (config.SubjectNameStrategy != null) { this.subjectNameStrategy = config.SubjectNameStrategy.Value.ToDelegate(); }
             
-            foreach (IRuleExecutor executor in RuleRegistry.GetRuleExecutors())
+            foreach (IRuleExecutor executor in this.ruleExecutors.Concat(RuleRegistry.GetRuleExecutors()))
             {
                 IEnumerable<KeyValuePair<string, string>> ruleConfigs = config
                     .Select(kv => new KeyValuePair<string, string>(
@@ -216,7 +218,7 @@ namespace Confluent.SchemaRegistry.Serdes
                     };
                     value = await SerdeUtils.ExecuteRules(context.Component == MessageComponentType.Key, subject,
                             context.Topic, context.Headers, RuleMode.Read, null,
-                            writerSchema, value, fieldTransformer)
+                            writerSchema, value, fieldTransformer, ruleExecutors)
                         .ContinueWith(t => (T)t.Result)
                         .ConfigureAwait(continueOnCapturedContext: false);
                 } 

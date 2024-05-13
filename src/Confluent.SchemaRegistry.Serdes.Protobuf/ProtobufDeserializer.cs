@@ -57,6 +57,7 @@ namespace Confluent.SchemaRegistry.Serdes
         private SemaphoreSlim deserializeMutex = new SemaphoreSlim(1);
 
         private ISchemaRegistryClient schemaRegistryClient;
+        private IList<IRuleExecutor> ruleExecutors;
         
         private bool useDeprecatedFormat = false;
         
@@ -78,9 +79,10 @@ namespace Confluent.SchemaRegistry.Serdes
         {
         }
 
-        public ProtobufDeserializer(ISchemaRegistryClient schemaRegistryClient, ProtobufDeserializerConfig config)
+        public ProtobufDeserializer(ISchemaRegistryClient schemaRegistryClient, ProtobufDeserializerConfig config, IList<IRuleExecutor> ruleExecutors = null)
         {
             this.schemaRegistryClient = schemaRegistryClient;
+            this.ruleExecutors = ruleExecutors ?? new List<IRuleExecutor>();
 
             this.parser = new MessageParser<T>(() => new T());
 
@@ -103,7 +105,7 @@ namespace Confluent.SchemaRegistry.Serdes
             if (config.UseLatestWithMetadata != null) { this.useLatestWithMetadata = config.UseLatestWithMetadata; }
             if (config.SubjectNameStrategy != null) { this.subjectNameStrategy = config.SubjectNameStrategy.Value.ToDelegate(); }
             
-            foreach (IRuleExecutor executor in RuleRegistry.GetRuleExecutors())
+            foreach (IRuleExecutor executor in this.ruleExecutors.Concat(RuleRegistry.GetRuleExecutors()))
             {
                 IEnumerable<KeyValuePair<string, string>> ruleConfigs = config
                     .Select(kv => new KeyValuePair<string, string>(
@@ -228,7 +230,7 @@ namespace Confluent.SchemaRegistry.Serdes
                         return await ProtobufUtils.Transform(ctx, fdSet, message, transform).ConfigureAwait(false);
                     };
                     message = await SerdeUtils.ExecuteRules(context.Component == MessageComponentType.Key, subject, context.Topic, context.Headers, RuleMode.Read, null,
-                        writerSchema, message, fieldTransformer)
+                        writerSchema, message, fieldTransformer, ruleExecutors)
                         .ContinueWith(t => (T)t.Result)
                         .ConfigureAwait(continueOnCapturedContext: false);
                 }

@@ -30,14 +30,14 @@ namespace Confluent.SchemaRegistry
         private static IDictionary<string, IRuleExecutor> ruleExecutors = new Dictionary<string, IRuleExecutor>();
         private static IDictionary<string, IRuleAction> ruleActions = new Dictionary<string, IRuleAction>();
         
-        public static void RegisterRuleExecutor(string name, IRuleExecutor executor)
+        public static void RegisterRuleExecutor(IRuleExecutor executor)
         {
             ruleExecutorsMutex.Wait();
             try
             {
-                if (!ruleExecutors.ContainsKey(name))
+                if (!ruleExecutors.ContainsKey(executor.Type()))
                 {
-                    ruleExecutors.Add(name, executor);
+                    ruleExecutors.Add(executor.Type(), executor);
                 }
             }
             finally
@@ -72,14 +72,14 @@ namespace Confluent.SchemaRegistry
             }
         }
         
-        public static void RegisterRuleAction(string name, IRuleAction action)
+        public static void RegisterRuleAction(IRuleAction action)
         {
             ruleActionsMutex.Wait();
             try
             {
-                if (!ruleActions.ContainsKey(name))
+                if (!ruleActions.ContainsKey(action.Type()))
                 {
-                    ruleActions.Add(name, action);
+                    ruleActions.Add(action.Type(), action);
                 }
             }
             finally

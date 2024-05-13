@@ -12,12 +12,7 @@ namespace Confluent.SchemaRegistry.Encryption
     {
         public static void Register()
         {
-            Register(null);
-        }
-
-        public static void Register(IDekRegistryClient client)
-        {
-            RuleRegistry.RegisterRuleExecutor(RuleType, new FieldEncryptionExecutor(client));
+            RuleRegistry.RegisterRuleExecutor(new FieldEncryptionExecutor());
         }
 
         public static readonly string RuleType = "ENCRYPT";

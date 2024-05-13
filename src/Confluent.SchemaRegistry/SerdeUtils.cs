@@ -211,7 +211,7 @@ namespace Confluent.SchemaRegistry
             foreach (Migration m in migrations)
             {
                 message = await ExecuteRules(isKey, subject, topic, headers, m.RuleMode,
-                    m.Source, m.Target, message, null).ConfigureAwait(continueOnCapturedContext: false);
+                    m.Source, m.Target, message, null, null).ConfigureAwait(continueOnCapturedContext: false);
             }
             return message;
         }
@@ -239,7 +239,8 @@ namespace Confluent.SchemaRegistry
             Schema source, 
             Schema target, 
             object message,
-            FieldTransformer fieldTransformer)
+            FieldTransformer fieldTransformer,
+            IList<IRuleExecutor> ruleExecutors)
         {
             if (message == null || target == null)
             {
@@ -299,7 +300,8 @@ namespace Confluent.SchemaRegistry
 
                 RuleContext ctx = new RuleContext(source, target,
                     subject, topic, headers, isKey, ruleMode, rule, i, rules, fieldTransformer);
-                if (RuleRegistry.TryGetRuleExecutor(rule.Type.ToUpper(), out IRuleExecutor ruleExecutor))
+                IRuleExecutor ruleExecutor = GetRuleExecutor(ruleExecutors, rule.Type.ToUpper());
+                if (ruleExecutor != null)
                 {
                     try
                     {
@@ -339,6 +341,27 @@ namespace Confluent.SchemaRegistry
                 }
             }
             return message;
+        }
+
+        private static IRuleExecutor GetRuleExecutor(IList<IRuleExecutor> ruleExecutors, string type)
+        {
+            if (ruleExecutors != null)
+            {
+                foreach (IRuleExecutor ruleExecutor in ruleExecutors)
+                {
+                    if (ruleExecutor.Type().Equals(type))
+                    {
+                        return ruleExecutor;
+                    }
+                }
+            }
+
+            if (RuleRegistry.TryGetRuleExecutor(type, out IRuleExecutor result))
+            {
+                return result;
+            }
+
+            return null;
         }
 
         private static async Task RunAction(RuleContext ctx, RuleMode ruleMode, 
