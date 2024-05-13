@@ -325,10 +325,10 @@ namespace Confluent.SchemaRegistry.Serdes
                 {
                     IDictionary<string, string> references = await SerdeUtils.ResolveReferences(schemaRegistryClient, latestSchema)
                             .ConfigureAwait(continueOnCapturedContext: false);
+                    // TODO cache
+                    var fdSet = ProtobufUtils.Parse(latestSchema.SchemaString, references);
                     FieldTransformer fieldTransformer = async (ctx, transform, message) =>
                     {
-                        // TODO cache
-                        var fdSet = ProtobufUtils.Parse(ctx.Target.SchemaString, references);
                         return await ProtobufUtils.Transform(ctx, fdSet, message, transform).ConfigureAwait(false);
                     };
                     value = await SerdeUtils.ExecuteRules(context.Component == MessageComponentType.Key, subject,

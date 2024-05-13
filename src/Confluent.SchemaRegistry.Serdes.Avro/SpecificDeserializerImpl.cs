@@ -213,9 +213,9 @@ namespace Confluent.SchemaRegistry.Serdes
                     }
                 }
 
+                var schema = Avro.Schema.Parse(writerSchemaJson.SchemaString);
                 FieldTransformer fieldTransformer = async (ctx, transform, message) => 
                 {
-                    var schema = Avro.Schema.Parse(ctx.Target.SchemaString);
                     return await AvroUtils.Transform(ctx, schema, message, transform).ConfigureAwait(false);
                 };
                 data = await SerdeUtils.ExecuteRules(isKey, subject, topic, headers, RuleMode.Read, null,
