@@ -35,7 +35,6 @@ namespace Confluent.SchemaRegistry.Encryption
         internal static readonly int MillisInDay = 24 * 60 * 60 * 1000;
         internal static readonly int VersionSize = 4;
 
-        internal IDictionary<DekFormat, Cryptor> Cryptors;
         internal IEnumerable<KeyValuePair<string, string>> Configs;
         internal IDekRegistryClient Client;
 
@@ -55,7 +54,6 @@ namespace Confluent.SchemaRegistry.Encryption
             {
                 Client = new CachedDekRegistryClient(Configs);
             }
-            Cryptors = new Dictionary<DekFormat, Cryptor>();
         }
 
         public override string Type() => RuleType;
@@ -74,19 +72,7 @@ namespace Confluent.SchemaRegistry.Encryption
             {
                 dekFormat = DekFormat.AES256_GCM;
             }
-            return GetCryptor(dekFormat);
-        }
-
-        private Cryptor GetCryptor(DekFormat dekFormat)
-        {
-            if (Cryptors.TryGetValue(dekFormat, out Cryptor value))
-            {
-                return value;
-            }
-
-            Cryptor cryptor = new Cryptor(dekFormat);
-            Cryptors.Add(dekFormat, cryptor);
-            return cryptor;
+            return new Cryptor(dekFormat);
         }
 
         internal static byte[] ToBytes(RuleContext.Type type, object obj)
