@@ -1,7 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
+        <!--
         <ProbjectTypeGuids>{6D514D1C-2433-4AC6-B51F-FE620C71C850}</ProbjectTypeGuids>
+        -->
         <Authors>Confluent Inc.</Authors>
         <Description>Provides field-level encryption for use with Confluent Schema Registry using Azure</Description>
         <Copyright>Copyright 2021-2022 Confluent Inc.</Copyright>
