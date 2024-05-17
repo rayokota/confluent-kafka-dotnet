@@ -17,6 +17,7 @@
 extern alias ProtobufNet;
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -92,9 +93,10 @@ namespace Confluent.SchemaRegistry.Serdes
 
             RuleContext.FieldContext fieldContext = ctx.CurrentField();
             
-            if (message.GetType().IsGenericType &&
-                (message.GetType().GetGenericTypeDefinition().IsAssignableFrom(typeof(List<>)) ||
-                 message.GetType().GetGenericTypeDefinition().IsAssignableFrom(typeof(IList<>))))
+            if (typeof(IList).IsAssignableFrom(message.GetType()) 
+                || (message.GetType().IsGenericType 
+                    && (message.GetType().GetGenericTypeDefinition() == typeof(List<>) 
+                        || message.GetType().GetGenericTypeDefinition() == typeof(IList<>))))
             {
                 var tasks = ((IList<object>)message)
                     .Select(it => Transform(ctx, desc, it, fieldTransform))
@@ -102,9 +104,10 @@ namespace Confluent.SchemaRegistry.Serdes
                 object[] items = await Task.WhenAll(tasks).ConfigureAwait(false);
                 return items.ToList();
             }
-            else if (message.GetType().IsGenericType &&
-                     (message.GetType().GetGenericTypeDefinition().IsAssignableFrom(typeof(Dictionary<,>)) ||
-                      message.GetType().GetGenericTypeDefinition().IsAssignableFrom(typeof(IDictionary<,>))))
+            else if (typeof(IDictionary).IsAssignableFrom(message.GetType()) 
+                     || (message.GetType().IsGenericType 
+                         && (message.GetType().GetGenericTypeDefinition() == typeof(Dictionary<,>) 
+                             || message.GetType().GetGenericTypeDefinition() == typeof(IDictionary<,>))))
             {
                 return message;
             }

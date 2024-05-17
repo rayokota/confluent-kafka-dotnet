@@ -13,6 +13,9 @@ namespace Confluent.SchemaRegistry.Rules
 
         public static readonly string RuleType = "JSONATA";
         
+        private readonly IDictionary<string, JsonataQuery> cache = new Dictionary<string, JsonataQuery>();
+        private readonly SemaphoreSlim cacheMutex = new SemaphoreSlim(1);
+        
         public JsonataExecutor()
         {
         }
@@ -24,14 +27,26 @@ namespace Confluent.SchemaRegistry.Rules
         public string Type() => RuleType;
 
 
-        public Task<object> Transform(RuleContext ctx, object message)
+        public async Task<object> Transform(RuleContext ctx, object message)
         {
-            // TODO cache
+            JsonataQuery query;
+            await cacheMutex.WaitAsync().ConfigureAwait(continueOnCapturedContext: false);
+            try
+            {
+                if (!cache.TryGetValue(ctx.Rule.Expr, out query))
+                {
+                    query = new JsonataQuery(ctx.Rule.Expr);
+                    cache[ctx.Rule.Expr] = query;
+                }
+            }
+            finally
+            {
+                cacheMutex.Release();
+            }
             JToken jsonObj = JsonataExtensions.FromNewtonsoft((Newtonsoft.Json.Linq.JToken)message);
-            JsonataQuery query = new JsonataQuery(ctx.Rule.Expr);
             JToken jtoken = query.Eval(jsonObj);
             object result = JsonataExtensions.ToNewtonsoft(jtoken);
-            return Task.FromResult(result);
+            return result;
         }
 
         public void Dispose()

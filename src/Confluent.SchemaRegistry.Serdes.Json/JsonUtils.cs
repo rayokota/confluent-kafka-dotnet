@@ -65,9 +65,10 @@ namespace Confluent.SchemaRegistry.Serdes
             }
             else if (schema.IsArray)
             {
-                bool isList = message.GetType().IsGenericType &&
-                              (message.GetType().GetGenericTypeDefinition().IsAssignableFrom(typeof(List<>)) ||
-                               message.GetType().GetGenericTypeDefinition().IsAssignableFrom(typeof(IList<>)));
+                bool isList = typeof(IList).IsAssignableFrom(message.GetType()) 
+                              || (message.GetType().IsGenericType 
+                                  && (message.GetType().GetGenericTypeDefinition() == typeof(List<>) 
+                                      || message.GetType().GetGenericTypeDefinition() == typeof(IList<>)));
                 if (!isList)
                 {
                     return message;
