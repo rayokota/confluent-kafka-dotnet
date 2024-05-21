@@ -15,10 +15,8 @@
 // Refer to LICENSE for more information.
 
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Net;
 using System.Reflection;
 using System.Text;
@@ -145,7 +143,6 @@ namespace Confluent.SchemaRegistry.Serdes
 
                 Schema writerSchemaJson = null;
                 Avro.Schema writerSchema = null;
-                DatumReader<T> datumReader = null;
                 object data;
                 IList<Migration> migrations = new List<Migration>();
                 using (var stream = new MemoryStream(array))
@@ -166,6 +163,7 @@ namespace Confluent.SchemaRegistry.Serdes
                             .ConfigureAwait(continueOnCapturedContext: false);
                     }
 
+                    DatumReader<T> datumReader = null;
                     if (migrations.Count > 0)
                     {
                         data = new GenericReader<GenericRecord>(writerSchema, writerSchema)
