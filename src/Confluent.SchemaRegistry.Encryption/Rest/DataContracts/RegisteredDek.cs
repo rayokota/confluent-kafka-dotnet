@@ -29,13 +29,13 @@ namespace Confluent.SchemaRegistry.Encryption
         ///     The KEK name for the DEK.
         /// </summary>
         [DataMember(Name = "kekName")]
-        public new string KekName { get; set; }
+        public string KekName { get; set; }
 
         /// <summary>
         ///     The key material.
         /// </summary>
         [DataMember(Name = "keyMaterial")]
-        public new string KeyMaterial
+        public string KeyMaterial
         {
             get => keyMaterial;
             init => keyMaterial = value;
@@ -45,12 +45,12 @@ namespace Confluent.SchemaRegistry.Encryption
         ///     The timestamp of the DEK.
         /// </summary>
         [DataMember(Name = "ts")]
-        public new long Timestamp { get; set; }
+        public long Timestamp { get; set; }
 
         /// <summary>
         ///     The encrypted key material bytes.
         /// </summary>
-        public new byte[] EncryptedKeyMaterialBytes
+        public byte[] EncryptedKeyMaterialBytes
         {
             get
             {
@@ -66,7 +66,7 @@ namespace Confluent.SchemaRegistry.Encryption
         /// <summary>
         ///     The key material bytes.
         /// </summary>
-        public new byte[] KeyMaterialBytes
+        public byte[] KeyMaterialBytes
         {
             get
             {

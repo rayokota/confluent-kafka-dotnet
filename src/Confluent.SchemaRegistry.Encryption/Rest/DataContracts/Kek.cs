@@ -26,42 +26,42 @@ namespace Confluent.SchemaRegistry.Encryption
         ///     The name of the KEK.
         /// </summary>
         [DataMember(Name = "name")]
-        public new string Name { get; set; }
+        public string Name { get; set; }
 
         /// <summary>
         ///     The KMS type for the KEK.
         /// </summary>
         [DataMember(Name = "kmsType")]
-        public new string KmsType { get; set; }
+        public string KmsType { get; set; }
 
         /// <summary>
         ///     The KMS key ID for the KEK
         /// </summary>
         [DataMember(Name = "kmsKeyId")] 
-        public new string KmsKeyId { get; set; }
+        public string KmsKeyId { get; set; }
         
         /// <summary>
         ///     The KMS properties.
         /// </summary>
         [DataMember(Name = "kmsProps")]
-        public new IDictionary<string, string> KmsProps { get; set; }
+        public IDictionary<string, string> KmsProps { get; set; }
 
         /// <summary>
         ///     The doc for the KEK.
         /// </summary>
         [DataMember(Name = "doc")] 
-        public new string Doc { get; set; }
+        public string Doc { get; set; }
         
         /// <summary>
         ///     Whether the KEK is shared.
         /// </summary>
         [DataMember(Name = "shared")]
-        public new bool Shared { get; set; }
+        public bool Shared { get; set; }
         
         /// <summary>
         ///     Whether the KEK is deleted.
         /// </summary>
         [DataMember(Name = "deleted")]
-        public new bool Deleted { get; set; }
+        public bool Deleted { get; set; }
     }
 }

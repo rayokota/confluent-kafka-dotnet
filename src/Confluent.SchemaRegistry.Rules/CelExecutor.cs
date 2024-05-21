@@ -24,8 +24,7 @@ namespace Confluent.SchemaRegistry.Rules
 
         public static readonly string RuleType = "CEL";
 
-        // TODO move to AvroTypeDescription
-        public static readonly Avro.Schema NullAvroSchema = PrimitiveSchema.Create(Avro.Schema.Type.Null);
+        public static readonly Avro.Schema NullAvroSchema = AvroTypeDescription.NullAvroSchema;
 
         private readonly IDictionary<RuleWithArgs, Script> cache = new Dictionary<RuleWithArgs, Script>();
         private readonly SemaphoreSlim cacheMutex = new SemaphoreSlim(1);

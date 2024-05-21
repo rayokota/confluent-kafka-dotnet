@@ -27,6 +27,7 @@ using Confluent.Kafka.Examples.AvroSpecific;
 using System;
 using Avro.Generic;
 using Confluent.SchemaRegistry.Encryption;
+using Confluent.SchemaRegistry.Rules;
 
 namespace Confluent.SchemaRegistry.Serdes.UnitTests
 {
@@ -36,7 +37,7 @@ namespace Confluent.SchemaRegistry.Serdes.UnitTests
         private IDekRegistryClient dekRegistryClient;
         private string testTopic;
         private IDictionary<string, int> store = new Dictionary<string, int>();
-        private IDictionary<string, RegisteredSchema> subjectStore = new Dictionary<string, RegisteredSchema>();
+        private IDictionary<string, List<RegisteredSchema>> subjectStore = new Dictionary<string, List<RegisteredSchema>>();
         private IDictionary<KekId, RegisteredKek> kekStore = new Dictionary<KekId, RegisteredKek>();
         private IDictionary<DekId, RegisteredDek> dekStore = new Dictionary<DekId, RegisteredDek>();
 
@@ -51,19 +52,23 @@ namespace Confluent.SchemaRegistry.Serdes.UnitTests
             schemaRegistryMock.Setup(x => x.GetSchemaAsync(It.IsAny<int>(), It.IsAny<string>())).ReturnsAsync(
                 (int id, string format) =>
                 {
-                    try
-                    {
-                        // First try subjectStore
-                        return subjectStore.Where(x => x.Value.Id == id).First().Value;
-                    }
-                    catch (InvalidOperationException e)
-                    {
-                        // Next try store
-                        return new Schema(store.Where(x => x.Value == id).First().Key, null, SchemaType.Avro);
-                    }
+                    return subjectStore.Values.SelectMany(x => x.Where(x => x.Id == id)).First();
                 });
+            schemaRegistryMock.Setup(x => x.GetRegisteredSchemaAsync(It.IsAny<string>(), It.IsAny<int>())).ReturnsAsync(
+                (string subject, int version) => subjectStore[subject].First(x => x.Version == version)
+            );
             schemaRegistryMock.Setup(x => x.GetLatestSchemaAsync(It.IsAny<string>())).ReturnsAsync(
-                (string subject) => subjectStore[subject]
+                (string subject) => subjectStore[subject].Last()
+            );
+            schemaRegistryMock.Setup(x => x.GetLatestWithMetadataAsync(It.IsAny<string>(), It.IsAny<IDictionary<string, string>>(), It.IsAny<bool>())).ReturnsAsync(
+                (string subject, IDictionary<string, string> metadata, bool ignoreDeleted) =>
+                {
+                    return subjectStore[subject].First(x =>
+                        x.Metadata != null 
+                        && x.Metadata.Properties != null 
+                        && metadata.Keys.All(k => x.Metadata.Properties.ContainsKey(k) && x.Metadata.Properties[k] == metadata[k])
+                    );
+                }
             );
             schemaRegistryClient = schemaRegistryMock.Object;
             
@@ -126,6 +131,7 @@ namespace Confluent.SchemaRegistry.Serdes.UnitTests
             
             // Register kms drivers
             LocalKmsDriver.Register();
+            JsonataExecutor.Register();
         }
 
         [Fact]
@@ -258,7 +264,7 @@ namespace Confluent.SchemaRegistry.Serdes.UnitTests
                 }
             );
             store[schemaStr] = 1;
-            subjectStore["topic-value"] = schema; 
+            subjectStore["topic-value"] = new List<RegisteredSchema> { schema }; 
             var config = new AvroSerializerConfig
             {
                 AutoRegisterSchemas = false,
@@ -284,6 +290,157 @@ namespace Confluent.SchemaRegistry.Serdes.UnitTests
             Assert.Equal("awesome", result.name);
             Assert.Equal(user.favorite_color, result.favorite_color);
             Assert.Equal(user.favorite_number, result.favorite_number);
+        }
+
+        [Fact]
+        public void JSONataFullyCompatible()
+        {
+            var rule1To2 = "$merge([$sift($, function($v, $k) {$k != 'name'}), {'full_name': $.'name'}])";
+            var rule2To1 = "$merge([$sift($, function($v, $k) {$k != 'full_name'}), {'name': $.'full_name'}])";
+            var rule2To3 = "$merge([$sift($, function($v, $k) {$k != 'full_name'}), {'title': $.'full_name'}])";
+            var rule3To2 = "$merge([$sift($, function($v, $k) {$k != 'title'}), {'full_name': $.'title'}])";
+
+            var schemaStr = User._SCHEMA.ToString();
+            var schema = new RegisteredSchema("topic-value", 1, 1, schemaStr, SchemaType.Avro, null);
+            schema.Metadata = new Metadata(null, new Dictionary<string, string>
+                {
+                    { "application.version", "1"}
+                    
+                }, new HashSet<string>()
+            );
+            store[schemaStr] = 1;
+            var config1 = new AvroSerializerConfig
+            {
+                AutoRegisterSchemas = false,
+                UseLatestVersion = false,
+                UseLatestWithMetadata = new Dictionary<string, string>{ { "application.version", "1"} }
+            };
+            var deserConfig1 = new AvroDeserializerConfig
+            {
+                UseLatestVersion = false,
+                UseLatestWithMetadata = new Dictionary<string, string>{ { "application.version", "1"} }
+            };
+            var serializer1 = new AvroSerializer<User>(schemaRegistryClient, config1);
+            var deserializer1 = new AvroDeserializer<User>(schemaRegistryClient, deserConfig1);
+
+            var user = new User
+            {
+                favorite_color = "blue",
+                favorite_number = 100,
+                name = "awesome"
+            };
+
+            var newSchemaStr = NewUser._SCHEMA.ToString();
+            var newSchema = new RegisteredSchema("topic-value", 2, 2, newSchemaStr, SchemaType.Avro, null);
+            newSchema.Metadata = new Metadata(null, new Dictionary<string, string>
+                {
+                    { "application.version", "2"}
+                    
+                }, new HashSet<string>()
+            );
+            newSchema.RuleSet = new RuleSet(
+                new List<Rule>
+                {
+                    new Rule("myRule1", RuleKind.Transform, RuleMode.Upgrade, "JSONATA", null, 
+                        null, rule1To2, null, null, false),
+                    new Rule("myRule2", RuleKind.Transform, RuleMode.Downgrade, "JSONATA", null, 
+                        null, rule2To1, null, null, false)
+                }, new List<Rule>()
+            );
+            var config2 = new AvroSerializerConfig
+            {
+                AutoRegisterSchemas = false,
+                UseLatestVersion = false,
+                UseLatestWithMetadata = new Dictionary<string, string>{ { "application.version", "2"} }
+            };
+            var deserConfig2 = new AvroDeserializerConfig
+            {
+                UseLatestVersion = false,
+                UseLatestWithMetadata = new Dictionary<string, string>{ { "application.version", "2"} }
+            };
+            var serializer2 = new AvroSerializer<NewUser>(schemaRegistryClient, config2);
+            var deserializer2 = new AvroDeserializer<NewUser>(schemaRegistryClient, deserConfig2);
+
+            var newUser = new NewUser
+            {
+                favorite_color = "blue",
+                favorite_number = 100,
+                full_name = "awesome"
+            };
+
+            var newerSchemaStr = NewerUser._SCHEMA.ToString();
+            var newerSchema = new RegisteredSchema("topic-value", 3, 3, newerSchemaStr, SchemaType.Avro, null);
+            newerSchema.Metadata = new Metadata(null, new Dictionary<string, string>
+                {
+                    { "application.version", "3"}
+                    
+                }, new HashSet<string>()
+            );
+            newerSchema.RuleSet = new RuleSet(
+                new List<Rule>
+                {
+                    new Rule("myRule1", RuleKind.Transform, RuleMode.Upgrade, "JSONATA", null, 
+                        null, rule2To3, null, null, false),
+                    new Rule("myRule2", RuleKind.Transform, RuleMode.Downgrade, "JSONATA", null, 
+                        null, rule3To2, null, null, false)
+                }, new List<Rule>()
+            );
+            var config3 = new AvroSerializerConfig
+            {
+                AutoRegisterSchemas = false,
+                UseLatestVersion = false,
+                UseLatestWithMetadata = new Dictionary<string, string>{ { "application.version", "3"} }
+            };
+            var deserConfig3 = new AvroDeserializerConfig
+            {
+                UseLatestVersion = false,
+                UseLatestWithMetadata = new Dictionary<string, string>{ { "application.version", "3"} }
+            };
+            var serializer3 = new AvroSerializer<NewerUser>(schemaRegistryClient, config3);
+            var deserializer3 = new AvroDeserializer<NewerUser>(schemaRegistryClient, deserConfig3);
+
+            var newerUser = new NewerUser
+            {
+                favorite_color = "blue",
+                favorite_number = 100,
+                title = "awesome"
+            };
+            
+            store[schemaStr] = 1;
+            store[newSchemaStr] = 2;
+            store[newerSchemaStr] = 3;
+            subjectStore["topic-value"] = new List<RegisteredSchema> { schema, newSchema, newerSchema }; 
+
+            Headers headers = new Headers();
+            var bytes = serializer1.SerializeAsync(user, new SerializationContext(MessageComponentType.Value, testTopic, headers)).Result;
+            DeserializeAllVersions(deserializer1, deserializer2, deserializer3, bytes, headers, user);
+            
+            bytes = serializer2.SerializeAsync(newUser, new SerializationContext(MessageComponentType.Value, testTopic, headers)).Result;
+            DeserializeAllVersions(deserializer1, deserializer2, deserializer3, bytes, headers, user);
+            
+            bytes = serializer3.SerializeAsync(newerUser, new SerializationContext(MessageComponentType.Value, testTopic, headers)).Result;
+            DeserializeAllVersions(deserializer1, deserializer2, deserializer3, bytes, headers, user);
+        }
+
+        private void DeserializeAllVersions(AvroDeserializer<User> deserializer1, 
+            AvroDeserializer<NewUser> deserializer2, AvroDeserializer<NewerUser> deserializer3, 
+            byte[] bytes, Headers headers, User user)
+        {
+            var result1 = deserializer1.DeserializeAsync(bytes, false, new SerializationContext(MessageComponentType.Value, testTopic, headers)).Result;
+            var result2 = deserializer2.DeserializeAsync(bytes, false, new SerializationContext(MessageComponentType.Value, testTopic, headers)).Result;
+            var result3 = deserializer3.DeserializeAsync(bytes, false, new SerializationContext(MessageComponentType.Value, testTopic, headers)).Result;
+
+            Assert.Equal("awesome", result1.name);
+            Assert.Equal(user.favorite_color, result1.favorite_color);
+            Assert.Equal(user.favorite_number, result1.favorite_number);
+
+            Assert.Equal("awesome", result2.full_name);
+            Assert.Equal(user.favorite_color, result2.favorite_color);
+            Assert.Equal(user.favorite_number, result2.favorite_number);
+
+            Assert.Equal("awesome", result3.title);
+            Assert.Equal(user.favorite_color, result3.favorite_color);
+            Assert.Equal(user.favorite_number, result3.favorite_number);
         }
 
         [Fact]

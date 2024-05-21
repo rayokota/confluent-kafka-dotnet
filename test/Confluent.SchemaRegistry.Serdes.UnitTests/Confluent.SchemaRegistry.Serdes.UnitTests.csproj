@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Confluent.SchemaRegistry\Confluent.SchemaRegistry.csproj" />
+    <ProjectReference Include="..\..\src\Confluent.SchemaRegistry.Rules\Confluent.SchemaRegistry.Rules.csproj" />
     <ProjectReference Include="..\..\src\Confluent.SchemaRegistry.Encryption\Confluent.SchemaRegistry.Encryption.csproj" />
     <ProjectReference Include="..\..\src\Confluent.SchemaRegistry.Encryption.Aws\Confluent.SchemaRegistry.Encryption.Aws.csproj" />
     <ProjectReference Include="..\..\src\Confluent.SchemaRegistry.Encryption.Azure\Confluent.SchemaRegistry.Encryption.Azure.csproj" />

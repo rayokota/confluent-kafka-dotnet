@@ -99,8 +99,8 @@ namespace Confluent.SchemaRegistry.Serdes.UnitTests
         private ISchemaRegistryClient schemaRegistryClient;
         private IDekRegistryClient dekRegistryClient;
         private string testTopic;
-        private Dictionary<string, int> store = new Dictionary<string, int>();
-        private Dictionary<string, RegisteredSchema> subjectStore = new Dictionary<string, RegisteredSchema>();
+        private IDictionary<string, int> store = new Dictionary<string, int>();
+        private IDictionary<string, List<RegisteredSchema>> subjectStore = new Dictionary<string, List<RegisteredSchema>>();
         private IDictionary<KekId, RegisteredKek> kekStore = new Dictionary<KekId, RegisteredKek>();
         private IDictionary<DekId, RegisteredDek> dekStore = new Dictionary<DekId, RegisteredDek>();
 
@@ -115,19 +115,23 @@ namespace Confluent.SchemaRegistry.Serdes.UnitTests
             schemaRegistryMock.Setup(x => x.GetSchemaAsync(It.IsAny<int>(), It.IsAny<string>())).ReturnsAsync(
                 (int id, string format) =>
                 {
-                    try
-                    {
-                        // First try subjectStore
-                        return subjectStore.Where(x => x.Value.Id == id).First().Value;
-                    }
-                    catch (InvalidOperationException e)
-                    {
-                        // Next try store
-                        return new Schema(store.Where(x => x.Value == id).First().Key, null, SchemaType.Protobuf);
-                    }
+                    return subjectStore.Values.SelectMany(x => x.Where(x => x.Id == id)).First();
                 });
+            schemaRegistryMock.Setup(x => x.GetRegisteredSchemaAsync(It.IsAny<string>(), It.IsAny<int>())).ReturnsAsync(
+                (string subject, int version) => subjectStore[subject].First(x => x.Version == version)
+            );
             schemaRegistryMock.Setup(x => x.GetLatestSchemaAsync(It.IsAny<string>())).ReturnsAsync(
-                (string subject) => subjectStore[subject]
+                (string subject) => subjectStore[subject].Last()
+            );
+            schemaRegistryMock.Setup(x => x.GetLatestWithMetadataAsync(It.IsAny<string>(), It.IsAny<IDictionary<string, string>>(), It.IsAny<bool>())).ReturnsAsync(
+                (string subject, IDictionary<string, string> metadata, bool ignoreDeleted) =>
+                {
+                    return subjectStore[subject].First(x =>
+                        x.Metadata != null 
+                        && x.Metadata.Properties != null 
+                        && metadata.Keys.All(k => x.Metadata.Properties.ContainsKey(k) && x.Metadata.Properties[k] == metadata[k])
+                    );
+                }
             );
             schemaRegistryClient = schemaRegistryMock.Object;   
             
@@ -360,7 +364,7 @@ namespace Confluent.SchemaRegistry.Serdes.UnitTests
                 }
             );
             store[schemaStr] = 1;
-            subjectStore["topic-value"] = schema; 
+            subjectStore["topic-value"] = new List<RegisteredSchema> { schema }; 
             var config = new JsonSerializerConfig
             {
                 AutoRegisterSchemas = false,

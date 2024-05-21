@@ -33,19 +33,19 @@ namespace  Confluent.SchemaRegistry
         ///     DEPRECATED. The subject the schema is registered against.
         /// </summary>
         [Obsolete("Included to maintain API backwards compatibility only. Use RegisteredSchema instead. This property will be removed in a future version of the library.")]
-        public string Subject { get; set; }
+        public virtual string Subject { get; set; }
 
         /// <summary>
         ///     DEPRECATED. The schema version.
         /// </summary>
         [Obsolete("Included to maintain API backwards compatibility only. Use RegisteredSchema instead. This property will be removed in a future version of the library.")]
-        public int Version { get; set; }
+        public virtual int Version { get; set; }
 
         /// <summary>
         ///     DEPRECATED. Unique identifier of the schema.
         /// </summary>
         [Obsolete("Included to maintain API backwards compatibility only. Use RegisteredSchema instead. This property will be removed in a future version of the library.")]
-        public int Id { get; set; }
+        public virtual int Id { get; set; }
 
         /// <summary>
         ///     DEPRECATED. Initializes a new instance of the Schema class.

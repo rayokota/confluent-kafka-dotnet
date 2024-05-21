@@ -26,6 +26,6 @@ namespace Confluent.SchemaRegistry.Encryption
         ///     The timestamp of the KEK.
         /// </summary>
         [DataMember(Name = "ts")]
-        public new long Timestamp { get; set; }
+        public long Timestamp { get; set; }
     }
 }

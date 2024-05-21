@@ -26,18 +26,18 @@ namespace Confluent.SchemaRegistry.Encryption
         ///     The KMS properties.
         /// </summary>
         [DataMember(Name = "kmsProps")]
-        public new IDictionary<string, string> KmsProps { get; set; }
+        public IDictionary<string, string> KmsProps { get; set; }
 
         /// <summary>
         ///     The doc for the KEK.
         /// </summary>
         [DataMember(Name = "doc")] 
-        public new string Doc { get; set; }
+        public string Doc { get; set; }
         
         /// <summary>
         ///     Whether the KEK is shared.
         /// </summary>
         [DataMember(Name = "shared")]
-        public new bool Shared { get; set; }
+        public bool Shared { get; set; }
     }
 }

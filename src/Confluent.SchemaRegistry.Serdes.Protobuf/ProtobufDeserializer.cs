@@ -14,6 +14,7 @@
 //
 // Refer to LICENSE for more information.
 
+extern alias ProtobufNet;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -23,6 +24,7 @@ using System.Net;
 using System.Threading;
 using Confluent.Kafka;
 using Google.Protobuf;
+using ProtobufNet::Google.Protobuf.Reflection;
 
 
 namespace Confluent.SchemaRegistry.Serdes
@@ -52,7 +54,7 @@ namespace Confluent.SchemaRegistry.Serdes
         private IDictionary<string, string> useLatestWithMetadata = null;
         private SubjectNameStrategyDelegate subjectNameStrategy = null;
         
-        private readonly Dictionary<int, Schema> schemaCache = new Dictionary<int, Schema>();
+        private readonly Dictionary<int, (Schema, FileDescriptorSet)> schemaCache = new Dictionary<int, (Schema, FileDescriptorSet)>();
         
         private SemaphoreSlim deserializeMutex = new SemaphoreSlim(1);
 
@@ -161,6 +163,7 @@ namespace Confluent.SchemaRegistry.Serdes
             try
             {
                 Schema writerSchema = null;
+                FileDescriptorSet fdSet = null;
                 T message;
                 using (var stream = new MemoryStream(array))
                 using (var reader = new BinaryReader(stream))
@@ -195,25 +198,7 @@ namespace Confluent.SchemaRegistry.Serdes
 
                     if (schemaRegistryClient != null)
                     {
-                        await deserializeMutex.WaitAsync().ConfigureAwait(continueOnCapturedContext: false);
-                        try
-                        {
-                            schemaCache.TryGetValue(writerId, out writerSchema);
-                            if (writerSchema == null)
-                            {
-                                if (schemaCache.Count > schemaRegistryClient.MaxCachedSchemas)
-                                {
-                                    schemaCache.Clear();
-                                }
-
-                                writerSchema = await schemaRegistryClient.GetSchemaAsync(writerId).ConfigureAwait(continueOnCapturedContext: false);
-                                schemaCache[writerId] = writerSchema;
-                            }
-                        }
-                        finally
-                        {
-                            deserializeMutex.Release();
-                        }
+                        (writerSchema, fdSet) = await GetSchema(writerId);
                     }
 
                     message = parser.ParseFrom(stream);
@@ -221,10 +206,6 @@ namespace Confluent.SchemaRegistry.Serdes
 
                 if (writerSchema != null)
                 {
-                    IDictionary<string, string> references = await SerdeUtils.ResolveReferences(schemaRegistryClient, writerSchema)
-                            .ConfigureAwait(continueOnCapturedContext: false);
-                    // TODO cache
-                    var fdSet = ProtobufUtils.Parse(writerSchema.SchemaString, references);
                     FieldTransformer fieldTransformer = async (ctx, transform, message) =>
                     {
                         return await ProtobufUtils.Transform(ctx, fdSet, message, transform).ConfigureAwait(false);
@@ -241,6 +222,39 @@ namespace Confluent.SchemaRegistry.Serdes
             {
                 throw e.InnerException;
             }
+        }
+
+        private async Task<(Schema, FileDescriptorSet)> GetSchema(int writerId)
+        {
+            Schema writerSchema;
+            FileDescriptorSet fdSet;
+            await deserializeMutex.WaitAsync().ConfigureAwait(continueOnCapturedContext: false);
+            try
+            {
+                if (schemaCache.TryGetValue(writerId, out var tuple))
+                {
+                    (writerSchema, fdSet) = tuple;
+                }
+                else
+                {
+                    if (schemaCache.Count > schemaRegistryClient.MaxCachedSchemas)
+                    {
+                        schemaCache.Clear();
+                    }
+
+                    writerSchema = await schemaRegistryClient.GetSchemaAsync(writerId).ConfigureAwait(continueOnCapturedContext: false);
+                    IDictionary<string, string> references = await SerdeUtils.ResolveReferences(schemaRegistryClient, writerSchema)
+                        .ConfigureAwait(continueOnCapturedContext: false);
+                    fdSet = ProtobufUtils.Parse(writerSchema.SchemaString, references);
+                    schemaCache[writerId] = (writerSchema, fdSet);
+                }
+            }
+            finally
+            {
+                deserializeMutex.Release();
+            }
+
+            return (writerSchema, fdSet);
         }
     }
 }

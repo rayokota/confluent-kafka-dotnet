@@ -25,30 +25,30 @@ namespace Confluent.SchemaRegistry.Encryption
         ///     The subject the DEK is registered under.
         /// </summary>
         [DataMember(Name = "subject")]
-        public new string Subject { get; set; }
+        public string Subject { get; set; }
 
         /// <summary>
         ///     The DEK version.
         /// </summary>
         [DataMember(Name = "version")]
-        public new int? Version { get; set; }
+        public int? Version { get; set; }
 
         /// <summary>
         ///     The DEK algorithm.
         /// </summary>
         [DataMember(Name = "algorithm")] 
-        public new DekFormat Algorithm { get; set; }
+        public DekFormat Algorithm { get; set; }
         
         /// <summary>
         ///     The encrypted key material.
         /// </summary>
         [DataMember(Name = "encryptedKeyMaterial")]
-        public new string EncryptedKeyMaterial { get; init; }
+        public string EncryptedKeyMaterial { get; init; }
 
         /// <summary>
         ///     Whether the DEK is deleted.
         /// </summary>
         [DataMember(Name = "deleted")]
-        public new bool Deleted { get; set; }
+        public bool Deleted { get; set; }
     }
 }

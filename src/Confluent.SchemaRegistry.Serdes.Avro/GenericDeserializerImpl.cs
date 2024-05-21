@@ -82,10 +82,12 @@ namespace Confluent.SchemaRegistry.Serdes
                             ? schemaRegistryClient.ConstructKeySubjectName(topic)
                             : schemaRegistryClient.ConstructValueSubjectName(topic);
                 
+                // TODO use
                 Schema latestSchema = await SerdeUtils.GetReaderSchema(schemaRegistryClient, subject, useLatestWithMetadata, useLatestVersion)
                     .ConfigureAwait(continueOnCapturedContext: false);
                 
                 Schema writerSchemaResult = null;
+                Avro.Schema writerSchema = null;
                 GenericRecord data;
                 using (var stream = new MemoryStream(array))
                 using (var reader = new BinaryReader(stream))
@@ -119,7 +121,7 @@ namespace Confluent.SchemaRegistry.Serdes
                             {
                                 throw new InvalidOperationException("Expecting writer schema to have type Avro, not {writerSchemaResult.SchemaType}");
                             }
-                            var writerSchema = global::Avro.Schema.Parse(writerSchemaResult.SchemaString);
+                            writerSchema = global::Avro.Schema.Parse(writerSchemaResult.SchemaString);
 
                             datumReader = new GenericReader<GenericRecord>(writerSchema, writerSchema);
                             datumReaderBySchemaId[writerId] = datumReader;
@@ -134,10 +136,9 @@ namespace Confluent.SchemaRegistry.Serdes
 
                 }
                 
-                var schema = Avro.Schema.Parse(writerSchemaResult.SchemaString);
                 FieldTransformer fieldTransformer = async (ctx, transform, message) => 
                 {
-                    return await AvroUtils.Transform(ctx, schema, message, transform).ConfigureAwait(false);
+                    return await AvroUtils.Transform(ctx, writerSchema, message, transform).ConfigureAwait(false);
                 };
                 data = await SerdeUtils.ExecuteRules(isKey, subject, topic, headers, RuleMode.Read, null,
                     writerSchemaResult, data, fieldTransformer, ruleExecutors)

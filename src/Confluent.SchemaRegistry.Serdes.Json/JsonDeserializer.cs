@@ -57,7 +57,7 @@ namespace Confluent.SchemaRegistry.Serdes
         
         private readonly int headerSize =  sizeof(int) + sizeof(byte);
         
-        private readonly Dictionary<int, Schema> schemaCache = new Dictionary<int, Schema>();
+        private readonly IDictionary<int, (Schema, JsonSchema)> schemaCache = new Dictionary<int, (Schema, JsonSchema)>();
         
         private SemaphoreSlim deserializeMutex = new SemaphoreSlim(1);
 
@@ -161,6 +161,7 @@ namespace Confluent.SchemaRegistry.Serdes
             try
             {
                 Schema writerSchema = null;
+                JsonSchema writerSchemaJson = null;
                 T value;
                 using (var stream = new MemoryStream(array))
                 using (var reader = new BinaryReader(stream))
@@ -179,31 +180,13 @@ namespace Confluent.SchemaRegistry.Serdes
 
                     if (schemaRegistryClient != null)
                     {
-                        await deserializeMutex.WaitAsync().ConfigureAwait(continueOnCapturedContext: false);
-                        try
-                        {
-                            schemaCache.TryGetValue(writerId, out writerSchema);
-                            if (writerSchema == null)
-                            {
-                                if (schemaCache.Count > schemaRegistryClient.MaxCachedSchemas)
-                                {
-                                    schemaCache.Clear();
-                                }
-
-                                writerSchema = await schemaRegistryClient.GetSchemaAsync(writerId).ConfigureAwait(continueOnCapturedContext: false);
-                                schemaCache[writerId] = writerSchema;
-                            }
-                        }
-                        finally
-                        {
-                            deserializeMutex.Release();
-                        }
+                        (writerSchema, writerSchemaJson) = await GetSchema(writerId);
                     }
                     // A schema is not required to deserialize json messages.
                     // TODO: add validation capability.
 
                     using (var jsonStream = new MemoryStream(array, headerSize, array.Length - headerSize))
-                    using (var jsonReader = new StreamReader(stream, Encoding.UTF8))
+                    using (var jsonReader = new StreamReader(jsonStream, Encoding.UTF8))
                     {
                         value = Newtonsoft.Json.JsonConvert.DeserializeObject<T>(jsonReader.ReadToEnd(), this.jsonSchemaGeneratorSettings?.ActualSerializerSettings);
                     }
@@ -211,7 +194,6 @@ namespace Confluent.SchemaRegistry.Serdes
                 }
                 if (writerSchema != null)
                 {
-                    JsonSchema writerSchemaJson = await JsonSchema.FromJsonAsync(writerSchema).ConfigureAwait(false);
                     FieldTransformer fieldTransformer = async (ctx, transform, message) =>
                     {
                         return await JsonUtils.Transform(ctx, writerSchemaJson, "$", message, transform).ConfigureAwait(false);
@@ -229,6 +211,37 @@ namespace Confluent.SchemaRegistry.Serdes
             {
                 throw e.InnerException;
             }
+        }
+
+        private async Task<(Schema, JsonSchema)> GetSchema(int writerId)
+        {
+            Schema writerSchema;
+            JsonSchema writerSchemaJson;
+            await deserializeMutex.WaitAsync().ConfigureAwait(continueOnCapturedContext: false);
+            try
+            {
+                if (schemaCache.TryGetValue(writerId, out var tuple))
+                {
+                    (writerSchema, writerSchemaJson) = tuple;
+                }
+                else
+                {
+                    if (schemaCache.Count > schemaRegistryClient.MaxCachedSchemas)
+                    {
+                        schemaCache.Clear();
+                    }
+
+                    writerSchema = await schemaRegistryClient.GetSchemaAsync(writerId).ConfigureAwait(continueOnCapturedContext: false);
+                    writerSchemaJson = await JsonSchema.FromJsonAsync(writerSchema).ConfigureAwait(false);
+                    schemaCache[writerId] = (writerSchema, writerSchemaJson);
+                }
+            }
+            finally
+            {
+                deserializeMutex.Release();
+            }
+
+            return (writerSchema, writerSchemaJson);
         }
     }
 }

@@ -24,13 +24,11 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
-using Confluent.SchemaRegistry.Serdes.Protobuf;
 using Google.Protobuf;
 using Google.Protobuf.Reflection;
 using ProtobufNet::ProtoBuf.Reflection;
 using IFileSystem = ProtobufNet::Google.Protobuf.Reflection.IFileSystem;
 using FileDescriptorSet = ProtobufNet::Google.Protobuf.Reflection.FileDescriptorSet;
-using FileDescriptorProto = ProtobufNet::Google.Protobuf.Reflection.FileDescriptorProto;
 using DescriptorProto = ProtobufNet::Google.Protobuf.Reflection.DescriptorProto;
 using FieldDescriptorProto = ProtobufNet::Google.Protobuf.Reflection.FieldDescriptorProto;
 
