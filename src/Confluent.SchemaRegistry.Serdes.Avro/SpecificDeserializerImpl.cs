@@ -27,6 +27,7 @@ using Avro.IO;
 using Avro.Generic;
 using Confluent.Kafka;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 
 namespace Confluent.SchemaRegistry.Serdes
@@ -182,9 +183,9 @@ namespace Confluent.SchemaRegistry.Serdes
                             jsonString = Encoding.UTF8.GetString(jsonStream.ToArray());
                         }
                         
-                        Newtonsoft.Json.Linq.JToken json = Newtonsoft.Json.Linq.JToken.Parse(jsonString);
+                        JToken json = JToken.Parse(jsonString);
                         json = await SerdeUtils.ExecuteMigrations(migrations, isKey, subject, topic, headers, json)
-                            .ContinueWith(t => (Newtonsoft.Json.Linq.JToken)t.Result)
+                            .ContinueWith(t => (JToken)t.Result)
                             .ConfigureAwait(continueOnCapturedContext: false);
                         Avro.IO.Decoder decoder = new JsonDecoder(ReaderSchema, json.ToString(Formatting.None));
                         

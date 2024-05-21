@@ -23,6 +23,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Confluent.Kafka;
+using Newtonsoft.Json.Linq;
 using NJsonSchema;
 using NJsonSchema.Generation;
 
@@ -163,6 +164,7 @@ namespace Confluent.SchemaRegistry.Serdes
                 Schema writerSchema = null;
                 JsonSchema writerSchemaJson = null;
                 T value;
+                IList<Migration> migrations = new List<Migration>();
                 using (var stream = new MemoryStream(array))
                 using (var reader = new BinaryReader(stream))
                 {
@@ -182,15 +184,36 @@ namespace Confluent.SchemaRegistry.Serdes
                     {
                         (writerSchema, writerSchemaJson) = await GetSchema(writerId);
                     }
+                    
+                    if (latestSchema != null)
+                    {
+                        migrations = await SerdeUtils.GetMigrations(schemaRegistryClient, subject, writerSchema, latestSchema)
+                            .ConfigureAwait(continueOnCapturedContext: false);
+                    }
+
+                    if (migrations.Count > 0)
+                    {
+                        using (var jsonStream = new MemoryStream(array, headerSize, array.Length - headerSize))
+                        using (var jsonReader = new StreamReader(jsonStream, Encoding.UTF8))
+                        {
+                            JToken json = Newtonsoft.Json.JsonConvert.DeserializeObject<JToken>(jsonReader.ReadToEnd(), this.jsonSchemaGeneratorSettings?.ActualSerializerSettings);
+                            json = await SerdeUtils.ExecuteMigrations(migrations, isKey, subject, topic, context.Headers, json)
+                                .ContinueWith(t => (JToken)t.Result)
+                                .ConfigureAwait(continueOnCapturedContext: false);
+                            value = json.ToObject<T>();
+                        }
+                    }
+                    else
+                    {
+                        using (var jsonStream = new MemoryStream(array, headerSize, array.Length - headerSize))
+                        using (var jsonReader = new StreamReader(jsonStream, Encoding.UTF8))
+                        {
+                            value = Newtonsoft.Json.JsonConvert.DeserializeObject<T>(jsonReader.ReadToEnd(), this.jsonSchemaGeneratorSettings?.ActualSerializerSettings);
+                        }
+                    }
+
                     // A schema is not required to deserialize json messages.
                     // TODO: add validation capability.
-
-                    using (var jsonStream = new MemoryStream(array, headerSize, array.Length - headerSize))
-                    using (var jsonReader = new StreamReader(jsonStream, Encoding.UTF8))
-                    {
-                        value = Newtonsoft.Json.JsonConvert.DeserializeObject<T>(jsonReader.ReadToEnd(), this.jsonSchemaGeneratorSettings?.ActualSerializerSettings);
-                    }
-                    
                 }
                 if (writerSchema != null)
                 {
