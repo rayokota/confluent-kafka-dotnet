@@ -40,17 +40,17 @@ namespace Confluent.SchemaRegistry
         public RuleMode RuleMode { get; set; }
 
         public Rule Rule { get; set; }
-        
-        public int Index { get; set; }
-        
-        public IList<Rule> Rules { get; set;}
 
-        public FieldTransformer FieldTransformer { get; set;}
+        public int Index { get; set; }
+
+        public IList<Rule> Rules { get; set; }
+
+        public FieldTransformer FieldTransformer { get; set; }
         public IDictionary<object, object> CustomData { get; } = new Dictionary<object, object>();
 
         private Stack<FieldContext> fieldContexts = new Stack<FieldContext>();
 
-        public RuleContext(Schema source, Schema target, string subject, string topic, Headers headers, bool isKey, 
+        public RuleContext(Schema source, Schema target, string subject, string topic, Headers headers, bool isKey,
             RuleMode ruleMode, Rule rule, int index, IList<Rule> rules, FieldTransformer fieldTransformer)
         {
             Source = source;
@@ -74,12 +74,13 @@ namespace Confluent.SchemaRegistry
                 if (WildcardMatcher.Match(fullName, entry.Key))
                 {
                     tags.UnionWith(entry.Value);
-                } 
+                }
             }
+
             return tags;
         }
-        
-        
+
+
         public string GetParameter(string key)
         {
             string value = null;
@@ -88,6 +89,7 @@ namespace Confluent.SchemaRegistry
             {
                 Target.Metadata?.Properties?.TryGetValue(key, out value);
             }
+
             return value;
         }
 
@@ -129,6 +131,12 @@ namespace Confluent.SchemaRegistry
                 Type = type;
                 Tags = tags;
                 RuleContext.fieldContexts.Push(this);
+            }
+
+            public bool IsPrimitive()
+            {
+                return Type == Type.String || Type == Type.Bytes || Type == Type.Int || Type == Type.Long ||
+                       Type == Type.Float || Type == Type.Double || Type == Type.Boolean || Type == Type.Null;
             }
 
             public void Dispose()

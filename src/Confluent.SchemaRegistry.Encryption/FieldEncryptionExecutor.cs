@@ -53,7 +53,7 @@ namespace Confluent.SchemaRegistry.Encryption
 
         public override string Type() => RuleType;
 
-        protected override IFieldTransform newTransform(RuleContext ctx)
+        public override IFieldTransform NewTransform(RuleContext ctx)
         {
             FieldEncryptionExecutorTransform transform = new FieldEncryptionExecutorTransform(this);
             transform.Init(ctx);

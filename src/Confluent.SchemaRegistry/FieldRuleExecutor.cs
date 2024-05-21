@@ -25,11 +25,11 @@ namespace Confluent.SchemaRegistry
         
         public abstract string Type();
 
-        protected abstract IFieldTransform newTransform(RuleContext ctx);
+        public abstract IFieldTransform NewTransform(RuleContext ctx);
 
         public async Task<object> Transform(RuleContext ctx, object message)
         {
-            using (IFieldTransform transform = newTransform(ctx))
+            using (IFieldTransform transform = NewTransform(ctx))
             {
                 return await ctx.FieldTransformer.Invoke(ctx, transform, message)
                     .ConfigureAwait(continueOnCapturedContext: false);
