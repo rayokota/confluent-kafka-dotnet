@@ -147,11 +147,11 @@ namespace Confluent.SchemaRegistry.Serdes
                     var subjectSchemaPair = new KeyValuePair<string, string>(subject, writerSchemaString);
                     if (!registeredSchemas.Contains(subjectSchemaPair))
                     {
-                        int newSchemaId;
-                        if (useLatestVersion)
+                        latestSchema = await SerdeUtils.GetReaderSchema(schemaRegistryClient, subject, useLatestWithMetadata, useLatestVersion)
+                            .ConfigureAwait(continueOnCapturedContext: false);
+                        int newSchemaId = -1;
+                        if (latestSchema != null)
                         {
-                            latestSchema = await schemaRegistryClient.GetLatestSchemaAsync(subject)
-                                .ConfigureAwait(continueOnCapturedContext: false);
                             newSchemaId = latestSchema.Id;
                         }
                         else
