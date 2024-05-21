@@ -34,7 +34,7 @@ using Xunit;
 
 namespace Confluent.SchemaRegistry.Serdes.UnitTests
 {
-    public class JsonSerializeDeserialzeTests
+    public class JsonSerializeDeserializeTests : BaseSerializeDeserializeTests
     {
         public class UInt32Value
         {
@@ -96,104 +96,8 @@ namespace Confluent.SchemaRegistry.Serdes.UnitTests
             public EnumType Value { get; set; }
         }
 
-        private ISchemaRegistryClient schemaRegistryClient;
-        private IDekRegistryClient dekRegistryClient;
-        private string testTopic;
-        private IDictionary<string, int> store = new Dictionary<string, int>();
-        private IDictionary<string, List<RegisteredSchema>> subjectStore = new Dictionary<string, List<RegisteredSchema>>();
-        private IDictionary<KekId, RegisteredKek> kekStore = new Dictionary<KekId, RegisteredKek>();
-        private IDictionary<DekId, RegisteredDek> dekStore = new Dictionary<DekId, RegisteredDek>();
-
-        public JsonSerializeDeserialzeTests()
+        public JsonSerializeDeserializeTests() : base()
         {
-            testTopic = "topic";
-            var schemaRegistryMock = new Mock<ISchemaRegistryClient>();
-            schemaRegistryMock.Setup(x => x.ConstructValueSubjectName(testTopic, It.IsAny<string>())).Returns($"{testTopic}-value");
-            schemaRegistryMock.Setup(x => x.RegisterSchemaAsync("topic-value", It.IsAny<string>(), It.IsAny<bool>())).ReturnsAsync(
-                (string topic, string schema, bool normalize) => store.TryGetValue(schema, out int id) ? id : store[schema] = store.Count + 1
-            );
-            schemaRegistryMock.Setup(x => x.GetSchemaAsync(It.IsAny<int>(), It.IsAny<string>())).ReturnsAsync(
-                (int id, string format) =>
-                {
-                    return subjectStore.Values.SelectMany(x => x.Where(x => x.Id == id)).First();
-                });
-            schemaRegistryMock.Setup(x => x.GetRegisteredSchemaAsync(It.IsAny<string>(), It.IsAny<int>())).ReturnsAsync(
-                (string subject, int version) => subjectStore[subject].First(x => x.Version == version)
-            );
-            schemaRegistryMock.Setup(x => x.GetLatestSchemaAsync(It.IsAny<string>())).ReturnsAsync(
-                (string subject) => subjectStore[subject].Last()
-            );
-            schemaRegistryMock.Setup(x => x.GetLatestWithMetadataAsync(It.IsAny<string>(), It.IsAny<IDictionary<string, string>>(), It.IsAny<bool>())).ReturnsAsync(
-                (string subject, IDictionary<string, string> metadata, bool ignoreDeleted) =>
-                {
-                    return subjectStore[subject].First(x =>
-                        x.Metadata != null 
-                        && x.Metadata.Properties != null 
-                        && metadata.Keys.All(k => x.Metadata.Properties.ContainsKey(k) && x.Metadata.Properties[k] == metadata[k])
-                    );
-                }
-            );
-            schemaRegistryClient = schemaRegistryMock.Object;   
-            
-            var dekRegistryMock = new Mock<IDekRegistryClient>();
-            dekRegistryMock.Setup(x => x.CreateKekAsync(It.IsAny<Kek>())).ReturnsAsync(
-                (Kek kek) =>
-                {
-                    var kekId = new KekId(kek.Name, false);
-                    return kekStore.TryGetValue(kekId, out RegisteredKek registeredKek)
-                        ? registeredKek
-                        : kekStore[kekId] = new RegisteredKek
-                        {
-                            Name = kek.Name,
-                            KmsType = kek.KmsType,
-                            KmsKeyId = kek.KmsKeyId,
-                            KmsProps = kek.KmsProps,
-                            Doc = kek.Doc,
-                            Shared = kek.Shared,
-                            Deleted = false,
-                            Timestamp = DateTimeOffset.Now.ToUnixTimeMilliseconds()
-                        };
-                });
-            dekRegistryMock.Setup(x => x.GetKekAsync(It.IsAny<string>(), It.IsAny<bool>())).ReturnsAsync(
-                (string name, bool ignoreDeletedKeks) =>
-                {
-                    var kekId = new KekId(name, false);
-                    return kekStore.TryGetValue(kekId, out RegisteredKek registeredKek) ? registeredKek : null;
-                });
-            dekRegistryMock.Setup(x => x.CreateDekAsync(It.IsAny<string>(), It.IsAny<Dek>())).ReturnsAsync(
-                (string kekName, Dek dek) =>
-                {
-                    int version = dek.Version ?? 1;
-                    var dekId = new DekId(kekName, dek.Subject, version, dek.Algorithm, false);
-                    return dekStore.TryGetValue(dekId, out RegisteredDek registeredDek)
-                        ? registeredDek
-                        : dekStore[dekId] = new RegisteredDek
-                        {
-                            KekName = kekName,
-                            Subject = dek.Subject,
-                            Version = version,
-                            Algorithm = dek.Algorithm,
-                            EncryptedKeyMaterial = dek.EncryptedKeyMaterial,
-                            Deleted = false,
-                            Timestamp = DateTimeOffset.Now.ToUnixTimeMilliseconds()
-                        };
-                });
-            dekRegistryMock.Setup(x => x.GetDekAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DekFormat>(), It.IsAny<bool>())).ReturnsAsync(
-                (string kekName, string subject, DekFormat? algorithm, bool ignoreDeletedKeks) =>
-                {
-                    var dekId = new DekId(kekName, subject, 1, algorithm, false);
-                    return dekStore.TryGetValue(dekId, out RegisteredDek registeredDek) ? registeredDek : null;
-                });
-            dekRegistryMock.Setup(x => x.GetDekVersionAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<DekFormat>(), It.IsAny<bool>())).ReturnsAsync(
-                (string kekName, string subject, int version, DekFormat? algorithm, bool ignoreDeletedKeks) =>
-                {
-                    var dekId = new DekId(kekName, subject, version, algorithm, false);
-                    return dekStore.TryGetValue(dekId, out RegisteredDek registeredDek) ? registeredDek : null;
-                });
-            dekRegistryClient = dekRegistryMock.Object;
-            
-            // Register kms drivers
-            LocalKmsDriver.Register();
         }
 
         [Fact]
