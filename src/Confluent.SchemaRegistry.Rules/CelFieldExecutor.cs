@@ -61,10 +61,10 @@ namespace Confluent.SchemaRegistry.Rules
                 object message = fieldCtx.ContainingMessage;
                 object result = await celExecutor.Execute(ctx, fieldValue, new Dictionary<string, object>
                     {
-                        { "value", fieldValue != null ? fieldValue : NullValue.NullValue},
+                        { "value", fieldValue ?? NullValue.NullValue},
                         { "fullName", fieldCtx.FullName },
                         { "name", fieldCtx.Name },
-                        { "typeName", fieldCtx.Type.ToString() },
+                        { "typeName", fieldCtx.Type.ToString().ToUpper() },
                         { "tags", fieldCtx.Tags },
                         { "message", message }
                     }

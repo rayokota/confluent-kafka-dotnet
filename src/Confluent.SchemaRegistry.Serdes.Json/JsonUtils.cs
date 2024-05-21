@@ -122,9 +122,11 @@ namespace Confluent.SchemaRegistry.Serdes
                         case JsonObjectType.Integer:
                         case JsonObjectType.Number:
                         case JsonObjectType.String:
+                            ISet<string> ruleTags = ctx.Rule.Tags ?? new HashSet<string>();
                             ISet<string> intersect = new HashSet<string>(fieldContext.Tags);
-                            intersect.IntersectWith(ctx.Rule.Tags);
-                            if (intersect.Count != 0)
+                            intersect.IntersectWith(ruleTags);
+                            
+                            if (ruleTags.Count == 0 || intersect.Count != 0)
                             {
                                 return await fieldTransform.Transform(ctx, fieldContext, message)
                                     .ConfigureAwait(continueOnCapturedContext: false);

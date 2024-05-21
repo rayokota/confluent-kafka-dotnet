@@ -69,11 +69,14 @@ namespace Confluent.SchemaRegistry
         public ISet<string> GetTags(string fullName)
         {
             ISet<string> tags = new HashSet<string>();
-            foreach (var entry in Target.Metadata?.Tags)
+            if (Target?.Metadata?.Tags != null)
             {
-                if (WildcardMatcher.Match(fullName, entry.Key))
+                foreach (var entry in Target?.Metadata?.Tags)
                 {
-                    tags.UnionWith(entry.Value);
+                    if (WildcardMatcher.Match(fullName, entry.Key))
+                    {
+                        tags.UnionWith(entry.Value);
+                    }
                 }
             }
 

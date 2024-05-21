@@ -15,6 +15,7 @@
 // Refer to LICENSE for more information.
 
 using System.Collections.Generic;
+using System.Runtime.Serialization;
 using System.Threading.Tasks;
 
 namespace Confluent.SchemaRegistry
@@ -37,7 +38,8 @@ namespace Confluent.SchemaRegistry
         
         public Task Run(RuleContext ctx, object message, RuleException exception = null)
         {
-            throw exception;
+            string msg = "Rule failed: " + ctx.Rule.Name;
+            throw new SerializationException(msg, exception);
         }
 
         public void Dispose()

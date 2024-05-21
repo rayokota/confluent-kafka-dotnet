@@ -140,6 +140,8 @@ namespace Confluent.SchemaRegistry.Serdes.UnitTests
             
             // Register kms drivers
             LocalKmsDriver.Register();
+            CelExecutor.Register();
+            CelFieldExecutor.Register();
             JsonataExecutor.Register();
         }
     }
