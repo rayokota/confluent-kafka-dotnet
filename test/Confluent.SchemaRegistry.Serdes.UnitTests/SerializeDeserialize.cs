@@ -247,6 +247,76 @@ namespace Confluent.SchemaRegistry.Serdes.UnitTests
         }
 
         [Fact]
+        public void ISpecificRecordCELFieldCondition()
+        {
+            var schemaStr = User._SCHEMA.ToString();
+            var schema = new RegisteredSchema("topic-value", 1, 1, schemaStr, SchemaType.Avro, null);
+            schema.RuleSet = new RuleSet(new List<Rule>(),
+                new List<Rule>
+                {
+                    new Rule("testCEL", RuleKind.Condition, RuleMode.Write, "CEL_FIELD", null, null, 
+                        "name == 'name' ; value == 'awesome'", null, null, false)
+                }
+            );
+            store[schemaStr] = 1;
+            subjectStore["topic-value"] = new List<RegisteredSchema> { schema }; 
+            var config = new AvroSerializerConfig
+            {
+                AutoRegisterSchemas = false,
+                UseLatestVersion = true
+            };
+            var serializer = new AvroSerializer<User>(schemaRegistryClient, config);
+            var deserializer = new AvroDeserializer<User>(schemaRegistryClient, null);
+
+            var user = new User
+            {
+                favorite_color = "blue",
+                favorite_number = 100,
+                name = "awesome"
+            };
+
+            Headers headers = new Headers();
+            var bytes = serializer.SerializeAsync(user, new SerializationContext(MessageComponentType.Value, testTopic, headers)).Result;
+            var result = deserializer.DeserializeAsync(bytes, false, new SerializationContext(MessageComponentType.Value, testTopic, headers)).Result;
+
+            Assert.Equal("awesome", result.name);
+            Assert.Equal("blue", result.favorite_color);
+            Assert.Equal(user.favorite_number, result.favorite_number);
+        }
+
+        [Fact]
+        public void ISpecificRecordCELFieldConditionFail()
+        {
+            var schemaStr = User._SCHEMA.ToString();
+            var schema = new RegisteredSchema("topic-value", 1, 1, schemaStr, SchemaType.Avro, null);
+            schema.RuleSet = new RuleSet(new List<Rule>(),
+                new List<Rule>
+                {
+                    new Rule("testCEL", RuleKind.Condition, RuleMode.Write, "CEL_FIELD", null, null, 
+                        "name == 'name' ; value != 'awesome'", null, null, false)
+                }
+            );
+            store[schemaStr] = 1;
+            subjectStore["topic-value"] = new List<RegisteredSchema> { schema }; 
+            var config = new AvroSerializerConfig
+            {
+                AutoRegisterSchemas = false,
+                UseLatestVersion = true
+            };
+            var serializer = new AvroSerializer<User>(schemaRegistryClient, config);
+
+            var user = new User
+            {
+                favorite_color = "blue",
+                favorite_number = 100,
+                name = "awesome"
+            };
+
+            Headers headers = new Headers();
+            Assert.Throws<AggregateException>(() => serializer.SerializeAsync(user, new SerializationContext(MessageComponentType.Value, testTopic, headers)).Result);
+        }
+
+        [Fact]
         public void ISpecificRecordFieldEncryption()
         {
             var schemaStr = "{\"type\":\"record\",\"name\":\"User\",\"namespace\":\"Confluent.Kafka.Examples.AvroSpecific" +
@@ -452,6 +522,228 @@ namespace Confluent.SchemaRegistry.Serdes.UnitTests
             Assert.Equal("awesome", result3.title);
             Assert.Equal(user.favorite_color, result3.favorite_color);
             Assert.Equal(user.favorite_number, result3.favorite_number);
+        }
+
+        [Fact]
+        public void GenericRecordCELCondition()
+        {
+            var schemaStr = User._SCHEMA.ToString();
+            var schema = new RegisteredSchema("topic-value", 1, 1, schemaStr, SchemaType.Avro, null);
+            schema.RuleSet = new RuleSet(new List<Rule>(),
+                new List<Rule>
+                {
+                    new Rule("testCEL", RuleKind.Condition, RuleMode.Write, "CEL", null, null, 
+                        "message.name == 'awesome'", null, null, false)
+                }
+            );
+            store[schemaStr] = 1;
+            subjectStore["topic-value"] = new List<RegisteredSchema> { schema }; 
+            var config = new AvroSerializerConfig
+            {
+                AutoRegisterSchemas = false,
+                UseLatestVersion = true
+            };
+            var serializer = new AvroSerializer<GenericRecord>(schemaRegistryClient, config);
+            var deserializer = new AvroDeserializer<GenericRecord>(schemaRegistryClient, null);
+
+            var user = new GenericRecord((RecordSchema) User._SCHEMA);
+            user.Add("name", "awesome");
+            user.Add("favorite_number", 100);
+            user.Add("favorite_color", "blue");
+
+            Headers headers = new Headers();
+            var bytes = serializer.SerializeAsync(user, new SerializationContext(MessageComponentType.Value, testTopic, headers)).Result;
+            var result = deserializer.DeserializeAsync(bytes, false, new SerializationContext(MessageComponentType.Value, testTopic, headers)).Result;
+
+            Assert.Equal("awesome", result["name"]);
+            Assert.Equal(user["favorite_color"], result["favorite_color"]);
+            Assert.Equal(user["favorite_number"], result["favorite_number"]);
+        }
+
+        [Fact]
+        public void GenericRecordCELConditionFail()
+        {
+            var schemaStr = User._SCHEMA.ToString();
+            var schema = new RegisteredSchema("topic-value", 1, 1, schemaStr, SchemaType.Avro, null);
+            schema.RuleSet = new RuleSet(new List<Rule>(),
+                new List<Rule>
+                {
+                    new Rule("testCEL", RuleKind.Condition, RuleMode.Write, "CEL", null, null, 
+                        "message.name != 'awesome'", null, null, false)
+                }
+            );
+            store[schemaStr] = 1;
+            subjectStore["topic-value"] = new List<RegisteredSchema> { schema }; 
+            var config = new AvroSerializerConfig
+            {
+                AutoRegisterSchemas = false,
+                UseLatestVersion = true
+            };
+            var serializer = new AvroSerializer<GenericRecord>(schemaRegistryClient, config);
+
+            var user = new GenericRecord((RecordSchema) User._SCHEMA);
+            user.Add("name", "awesome");
+            user.Add("favorite_number", 100);
+            user.Add("favorite_color", "blue");
+
+            Headers headers = new Headers();
+            Assert.Throws<AggregateException>(() => serializer.SerializeAsync(user, new SerializationContext(MessageComponentType.Value, testTopic, headers)).Result);
+        }
+
+        [Fact]
+        public void GenericecordCELFieldTransform()
+        {
+            var schemaStr = User._SCHEMA.ToString();
+            var schema = new RegisteredSchema("topic-value", 1, 1, schemaStr, SchemaType.Avro, null);
+            schema.RuleSet = new RuleSet(new List<Rule>(),
+                new List<Rule>
+                {
+                    new Rule("testCEL", RuleKind.Transform, RuleMode.Write, "CEL_FIELD", null, null, 
+                        "typeName == 'STRING' ; value + '-suffix'", null, null, false)
+                }
+            );
+            store[schemaStr] = 1;
+            subjectStore["topic-value"] = new List<RegisteredSchema> { schema }; 
+            var config = new AvroSerializerConfig
+            {
+                AutoRegisterSchemas = false,
+                UseLatestVersion = true
+            };
+            var serializer = new AvroSerializer<GenericRecord>(schemaRegistryClient, config);
+            var deserializer = new AvroDeserializer<GenericRecord>(schemaRegistryClient, null);
+
+            var user = new GenericRecord((RecordSchema) User._SCHEMA);
+            user.Add("name", "awesome");
+            user.Add("favorite_number", 100);
+            user.Add("favorite_color", "blue");
+
+            Headers headers = new Headers();
+            var bytes = serializer.SerializeAsync(user, new SerializationContext(MessageComponentType.Value, testTopic, headers)).Result;
+            var result = deserializer.DeserializeAsync(bytes, false, new SerializationContext(MessageComponentType.Value, testTopic, headers)).Result;
+
+            Assert.Equal("awesome-suffix", result["name"]);
+            Assert.Equal("blue-suffix", result["favorite_color"]);
+            Assert.Equal(user["favorite_number"], result["favorite_number"]);
+        }
+
+        [Fact]
+        public void GenericRecordCELFieldCondition()
+        {
+            var schemaStr = User._SCHEMA.ToString();
+            var schema = new RegisteredSchema("topic-value", 1, 1, schemaStr, SchemaType.Avro, null);
+            schema.RuleSet = new RuleSet(new List<Rule>(),
+                new List<Rule>
+                {
+                    new Rule("testCEL", RuleKind.Condition, RuleMode.Write, "CEL_FIELD", null, null, 
+                        "name == 'name' ; value == 'awesome'", null, null, false)
+                }
+            );
+            store[schemaStr] = 1;
+            subjectStore["topic-value"] = new List<RegisteredSchema> { schema }; 
+            var config = new AvroSerializerConfig
+            {
+                AutoRegisterSchemas = false,
+                UseLatestVersion = true
+            };
+            var serializer = new AvroSerializer<GenericRecord>(schemaRegistryClient, config);
+            var deserializer = new AvroDeserializer<GenericRecord>(schemaRegistryClient, null);
+
+            var user = new GenericRecord((RecordSchema) User._SCHEMA);
+            user.Add("name", "awesome");
+            user.Add("favorite_number", 100);
+            user.Add("favorite_color", "blue");
+
+            Headers headers = new Headers();
+            var bytes = serializer.SerializeAsync(user, new SerializationContext(MessageComponentType.Value, testTopic, headers)).Result;
+            var result = deserializer.DeserializeAsync(bytes, false, new SerializationContext(MessageComponentType.Value, testTopic, headers)).Result;
+
+            Assert.Equal("awesome", result["name"]);
+            Assert.Equal(user["favorite_color"], result["favorite_color"]);
+            Assert.Equal(user["favorite_number"], result["favorite_number"]);
+        }
+
+        [Fact]
+        public void GenericRecordCELFieldConditionFail()
+        {
+            var schemaStr = User._SCHEMA.ToString();
+            var schema = new RegisteredSchema("topic-value", 1, 1, schemaStr, SchemaType.Avro, null);
+            schema.RuleSet = new RuleSet(new List<Rule>(),
+                new List<Rule>
+                {
+                    new Rule("testCEL", RuleKind.Condition, RuleMode.Write, "CEL_FIELD", null, null, 
+                        "name == 'name' ; value != 'awesome'", null, null, false)
+                }
+            );
+            store[schemaStr] = 1;
+            subjectStore["topic-value"] = new List<RegisteredSchema> { schema }; 
+            var config = new AvroSerializerConfig
+            {
+                AutoRegisterSchemas = false,
+                UseLatestVersion = true
+            };
+            var serializer = new AvroSerializer<GenericRecord>(schemaRegistryClient, config);
+
+            var user = new GenericRecord((RecordSchema) User._SCHEMA);
+            user.Add("name", "awesome");
+            user.Add("favorite_number", 100);
+            user.Add("favorite_color", "blue");
+
+            Headers headers = new Headers();
+            Assert.Throws<AggregateException>(() => serializer.SerializeAsync(user, new SerializationContext(MessageComponentType.Value, testTopic, headers)).Result);
+        }
+
+        [Fact]
+        public void GenericRecordFieldEncryption()
+        {
+            var schemaStr = "{\"type\":\"record\",\"name\":\"User\",\"namespace\":\"Confluent.Kafka.Examples.AvroSpecific" +
+            "\",\"fields\":[{\"name\":\"name\",\"type\":\"string\",\"confluent:tags\": [ \"PII\" ]},{\"name\":\"favorite_number\",\"type\":[\"i" +
+            "nt\",\"null\"]},{\"name\":\"favorite_color\",\"type\":[\"string\",\"null\"]}]}";
+
+            var schema = new RegisteredSchema("topic-value", 1, 1, schemaStr, SchemaType.Avro, null);
+            schema.Metadata = new Metadata(new Dictionary<string, ISet<string>>
+                {
+                    ["Confluent.Kafka.Examples.AvroSpecific.User.name"] = new HashSet<string> { "PII" }
+
+                }, new Dictionary<string, string>(), new HashSet<string>()
+            );
+            schema.RuleSet = new RuleSet(new List<Rule>(),
+                new List<Rule>
+                {
+                    new Rule("encryptPII", RuleKind.Transform, RuleMode.WriteRead, "ENCRYPT", new HashSet<string>
+                    {
+                        "PII"
+                    }, new Dictionary<string, string>
+                    {
+                        ["encrypt.kek.name"] = "kek1",
+                        ["encrypt.kms.type"] = "local-kms",
+                        ["encrypt.kms.key.id"] = "mykey"
+                    })
+                }
+            );
+            store[schemaStr] = 1;
+            subjectStore["topic-value"] = new List<RegisteredSchema> { schema }; 
+            var config = new AvroSerializerConfig
+            {
+                AutoRegisterSchemas = false,
+                UseLatestVersion = true
+            };
+            config.Set("rules.secret", "mysecret");
+            IRuleExecutor ruleExecutor = new FieldEncryptionExecutor(dekRegistryClient);
+            var serializer = new AvroSerializer<GenericRecord>(schemaRegistryClient, config, new List<IRuleExecutor>{ ruleExecutor});
+            var deserializer = new AvroDeserializer<GenericRecord>(schemaRegistryClient, null, new List<IRuleExecutor>{ ruleExecutor});
+
+            var user = new GenericRecord((RecordSchema) User._SCHEMA);
+            user.Add("name", "awesome");
+            user.Add("favorite_number", 100);
+            user.Add("favorite_color", "blue");
+
+            Headers headers = new Headers();
+            var bytes = serializer.SerializeAsync(user, new SerializationContext(MessageComponentType.Value, testTopic, headers)).Result;
+            var result = deserializer.DeserializeAsync(bytes, false, new SerializationContext(MessageComponentType.Value, testTopic, headers)).Result;
+
+            Assert.Equal("awesome", result["name"]);
+            Assert.Equal(user["favorite_color"], result["favorite_color"]);
+            Assert.Equal(user["favorite_number"], result["favorite_number"]);
         }
 
         [Fact]
