@@ -96,6 +96,229 @@ namespace Confluent.SchemaRegistry.Serdes.UnitTests
         }
 
         [Fact]
+        public void CELCondition()
+        {
+            string schemaStr = @"syntax = ""proto3"";
+            import ""confluent/meta.proto"";
+
+            package example;
+
+            message Person {
+                string favorite_color = 1;
+                int32 favorite_number = 2;
+                string name = 3;
+            }";
+            var schema = new RegisteredSchema("topic-value", 1, 1, schemaStr, SchemaType.Protobuf, null);
+            schema.RuleSet = new RuleSet(new List<Rule>(),
+                new List<Rule>
+                {
+                    new Rule("testCEL", RuleKind.Condition, RuleMode.Write, "CEL", null, null, 
+                        "message.name == 'awesome'", null, null, false)
+                }
+            );
+            store[schemaStr] = 1;
+            subjectStore["topic-value"] = new List<RegisteredSchema> { schema }; 
+            var config = new ProtobufSerializerConfig
+            {
+                AutoRegisterSchemas = false,
+                UseLatestVersion = true
+            };
+            var serializer = new ProtobufSerializer<Person>(schemaRegistryClient, config);
+            var deserializer = new ProtobufDeserializer<Person>(schemaRegistryClient, null);
+
+            var user = new Person
+            {
+                FavoriteColor = "blue",
+                FavoriteNumber = 100,
+                Name = "awesome"
+            };
+
+            Headers headers = new Headers();
+            var bytes = serializer.SerializeAsync(user, new SerializationContext(MessageComponentType.Value, testTopic, headers)).Result;
+            var result = deserializer.DeserializeAsync(bytes, false, new SerializationContext(MessageComponentType.Value, testTopic, headers)).Result;
+
+            Assert.Equal("awesome", result.Name);
+            Assert.Equal(user.FavoriteColor, result.FavoriteColor);
+            Assert.Equal(user.FavoriteNumber, result.FavoriteNumber);
+        }
+
+        [Fact]
+        public void CELConditionFail()
+        {
+            string schemaStr = @"syntax = ""proto3"";
+            import ""confluent/meta.proto"";
+
+            package example;
+
+            message Person {
+                string favorite_color = 1;
+                int32 favorite_number = 2;
+                string name = 3;
+            }";
+            var schema = new RegisteredSchema("topic-value", 1, 1, schemaStr, SchemaType.Protobuf, null);
+            schema.RuleSet = new RuleSet(new List<Rule>(),
+                new List<Rule>
+                {
+                    new Rule("testCEL", RuleKind.Condition, RuleMode.Write, "CEL", null, null, 
+                        "message.name != 'awesome'", null, null, false)
+                }
+            );
+            store[schemaStr] = 1;
+            subjectStore["topic-value"] = new List<RegisteredSchema> { schema }; 
+            var config = new ProtobufSerializerConfig
+            {
+                AutoRegisterSchemas = false,
+                UseLatestVersion = true
+            };
+            var serializer = new ProtobufSerializer<Person>(schemaRegistryClient, config);
+
+            var user = new Person
+            {
+                FavoriteColor = "blue",
+                FavoriteNumber = 100,
+                Name = "awesome"
+            };
+
+            Headers headers = new Headers();
+            Assert.Throws<AggregateException>(() => serializer.SerializeAsync(user, new SerializationContext(MessageComponentType.Value, testTopic, headers)).Result);
+        }
+
+        [Fact]
+        public void CELFieldTransform()
+        {
+            string schemaStr = @"syntax = ""proto3"";
+            import ""confluent/meta.proto"";
+
+            package example;
+
+            message Person {
+                string favorite_color = 1;
+                int32 favorite_number = 2;
+                string name = 3;
+            }";
+            var schema = new RegisteredSchema("topic-value", 1, 1, schemaStr, SchemaType.Protobuf, null);
+            schema.RuleSet = new RuleSet(new List<Rule>(),
+                new List<Rule>
+                {
+                    new Rule("testCEL", RuleKind.Transform, RuleMode.Write, "CEL_FIELD", null, null, 
+                        "typeName == 'STRING' ; value + '-suffix'", null, null, false)
+                }
+            );
+            store[schemaStr] = 1;
+            subjectStore["topic-value"] = new List<RegisteredSchema> { schema }; 
+            var config = new ProtobufSerializerConfig
+            {
+                AutoRegisterSchemas = false,
+                UseLatestVersion = true
+            };
+            var serializer = new ProtobufSerializer<Person>(schemaRegistryClient, config);
+            var deserializer = new ProtobufDeserializer<Person>(schemaRegistryClient, null);
+
+            var user = new Person
+            {
+                FavoriteColor = "blue",
+                FavoriteNumber = 100,
+                Name = "awesome"
+            };
+
+            Headers headers = new Headers();
+            var bytes = serializer.SerializeAsync(user, new SerializationContext(MessageComponentType.Value, testTopic, headers)).Result;
+            var result = deserializer.DeserializeAsync(bytes, false, new SerializationContext(MessageComponentType.Value, testTopic, headers)).Result;
+
+            Assert.Equal("awesome-suffix", result.Name);
+            Assert.Equal("blue-suffix", result.FavoriteColor);
+            Assert.Equal(user.FavoriteNumber, result.FavoriteNumber);
+        }
+
+        [Fact]
+        public void CELFieldCondition()
+        {
+            string schemaStr = @"syntax = ""proto3"";
+            import ""confluent/meta.proto"";
+
+            package example;
+
+            message Person {
+                string favorite_color = 1;
+                int32 favorite_number = 2;
+                string name = 3;
+            }";
+            var schema = new RegisteredSchema("topic-value", 1, 1, schemaStr, SchemaType.Protobuf, null);
+            schema.RuleSet = new RuleSet(new List<Rule>(),
+                new List<Rule>
+                {
+                    new Rule("testCEL", RuleKind.Condition, RuleMode.Write, "CEL_FIELD", null, null, 
+                        "name == 'name' ; value == 'awesome'", null, null, false)
+                }
+            );
+            store[schemaStr] = 1;
+            subjectStore["topic-value"] = new List<RegisteredSchema> { schema }; 
+            var config = new ProtobufSerializerConfig
+            {
+                AutoRegisterSchemas = false,
+                UseLatestVersion = true
+            };
+            var serializer = new ProtobufSerializer<Person>(schemaRegistryClient, config);
+            var deserializer = new ProtobufDeserializer<Person>(schemaRegistryClient, null);
+
+            var user = new Person
+            {
+                FavoriteColor = "blue",
+                FavoriteNumber = 100,
+                Name = "awesome"
+            };
+
+            Headers headers = new Headers();
+            var bytes = serializer.SerializeAsync(user, new SerializationContext(MessageComponentType.Value, testTopic, headers)).Result;
+            var result = deserializer.DeserializeAsync(bytes, false, new SerializationContext(MessageComponentType.Value, testTopic, headers)).Result;
+
+            Assert.Equal("awesome", result.Name);
+            Assert.Equal(user.FavoriteColor, result.FavoriteColor);
+            Assert.Equal(user.FavoriteNumber, result.FavoriteNumber);
+        }
+
+        [Fact]
+        public void CELFieldConditionFail()
+        {
+            string schemaStr = @"syntax = ""proto3"";
+            import ""confluent/meta.proto"";
+
+            package example;
+
+            message Person {
+                string favorite_color = 1;
+                int32 favorite_number = 2;
+                string name = 3;
+            }";
+            var schema = new RegisteredSchema("topic-value", 1, 1, schemaStr, SchemaType.Protobuf, null);
+            schema.RuleSet = new RuleSet(new List<Rule>(),
+                new List<Rule>
+                {
+                    new Rule("testCEL", RuleKind.Condition, RuleMode.Write, "CEL_FIELD", null, null, 
+                        "name == 'name' ; value != 'awesome'", null, null, false)
+                }
+            );
+            store[schemaStr] = 1;
+            subjectStore["topic-value"] = new List<RegisteredSchema> { schema }; 
+            var config = new ProtobufSerializerConfig
+            {
+                AutoRegisterSchemas = false,
+                UseLatestVersion = true
+            };
+            var serializer = new ProtobufSerializer<Person>(schemaRegistryClient, config);
+
+            var user = new Person
+            {
+                FavoriteColor = "blue",
+                FavoriteNumber = 100,
+                Name = "awesome"
+            };
+
+            Headers headers = new Headers();
+            Assert.Throws<AggregateException>(() => serializer.SerializeAsync(user, new SerializationContext(MessageComponentType.Value, testTopic, headers)).Result);
+        }
+
+        [Fact]
         public void FieldEncryption()
         {
             string schemaStr = @"syntax = ""proto3"";
