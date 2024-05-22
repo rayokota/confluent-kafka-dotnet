@@ -26,6 +26,7 @@ using System;
 using System.Threading;
 using System.Security.Cryptography.X509Certificates;
 using Confluent.Kafka;
+using Microsoft.Extensions.Caching.Memory;
 
 
 namespace Confluent.SchemaRegistry
@@ -55,6 +56,7 @@ namespace Confluent.SchemaRegistry
 
         private IRestService restService;
         private int identityMapCapacity;
+        private int latestCacheTtlSecs;
         private readonly Dictionary<int, Schema> schemaById = new Dictionary<int, Schema>();
 
         private readonly Dictionary<string /*subject*/, Dictionary<string, int>> idBySchemaBySubject =
@@ -62,6 +64,10 @@ namespace Confluent.SchemaRegistry
 
         private readonly Dictionary<string /*subject*/, Dictionary<int, RegisteredSchema>> schemaByVersionBySubject =
             new Dictionary<string, Dictionary<int, RegisteredSchema>>();
+
+        private readonly MemoryCache latestVersionBySubject = new MemoryCache(new MemoryCacheOptions());
+        
+        private readonly MemoryCache latestWithMetadataBySubject = new MemoryCache(new MemoryCacheOptions());
 
         private readonly SemaphoreSlim cacheMutex = new SemaphoreSlim(1);
 
@@ -78,6 +84,11 @@ namespace Confluent.SchemaRegistry
         ///     The default maximum capacity of the local schema cache.
         /// </summary>
         public const int DefaultMaxCachedSchemas = 1000;
+
+        /// <summary>
+        ///     The default TTL for caches holding latest schemas.
+        /// </summary>
+        public const int DefaultLatestCacheTtlSecs = -1;
 
         /// <summary>
         ///     The default SSL server certificate verification for Schema Registry REST API calls.
@@ -192,6 +203,20 @@ namespace Confluent.SchemaRegistry
                     $"Configured value for {SchemaRegistryConfig.PropertyNames.SchemaRegistryMaxCachedSchemas} must be an integer.");
             }
 
+            var latestCacheTtlSecsMaybe = config.FirstOrDefault(prop =>
+                prop.Key.ToLower() == SchemaRegistryConfig.PropertyNames.SchemaRegistryLatestCacheTtlSecs);
+            try
+            {
+                this.latestCacheTtlSecs = latestCacheTtlSecsMaybe.Value == null
+                    ? DefaultLatestCacheTtlSecs
+                    : Convert.ToInt32(latestCacheTtlSecsMaybe.Value);
+            }
+            catch (FormatException)
+            {
+                throw new ArgumentException(
+                    $"Configured value for {SchemaRegistryConfig.PropertyNames.SchemaRegistryLatestCacheTtlSecs} must be an integer.");
+            }
+            
             var basicAuthSource = config.FirstOrDefault(prop =>
                     prop.Key.ToLower() == SchemaRegistryConfig.PropertyNames.SchemaRegistryBasicAuthCredentialsSource)
                 .Value ?? "";
@@ -284,6 +309,7 @@ namespace Confluent.SchemaRegistry
                 if (property.Key != SchemaRegistryConfig.PropertyNames.SchemaRegistryUrl &&
                     property.Key != SchemaRegistryConfig.PropertyNames.SchemaRegistryRequestTimeoutMs &&
                     property.Key != SchemaRegistryConfig.PropertyNames.SchemaRegistryMaxCachedSchemas &&
+                    property.Key != SchemaRegistryConfig.PropertyNames.SchemaRegistryLatestCacheTtlSecs &&
                     property.Key != SchemaRegistryConfig.PropertyNames.SchemaRegistryBasicAuthCredentialsSource &&
                     property.Key != SchemaRegistryConfig.PropertyNames.SchemaRegistryBasicAuthUserInfo &&
                     property.Key != SchemaRegistryConfig.PropertyNames.SchemaRegistryKeySubjectNameStrategy &&
@@ -572,10 +598,40 @@ namespace Confluent.SchemaRegistry
 
         /// <inheritdoc/>
         public async Task<RegisteredSchema> GetLatestSchemaAsync(string subject)
-            => await restService.GetLatestSchemaAsync(subject).ConfigureAwait(continueOnCapturedContext: false);
+        {
+            RegisteredSchema schema;
+            if (!latestVersionBySubject.TryGetValue(subject, out schema))
+            {
+                schema = await restService.GetLatestSchemaAsync(subject).ConfigureAwait(continueOnCapturedContext: false);
+                MemoryCacheEntryOptions opts = new MemoryCacheEntryOptions();
+                if (latestCacheTtlSecs > 0)
+                {
+                    opts.AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(latestCacheTtlSecs);
+                }
 
-        public async Task<RegisteredSchema> GetLatestWithMetadataAsync(string subject, IDictionary<string, string> metadata, bool ignoreDeletedSchemas)
-            => await restService.GetLatestWithMetadataAsync(subject, metadata, ignoreDeletedSchemas).ConfigureAwait(continueOnCapturedContext: false);
+                latestVersionBySubject.Set(subject, schema, opts);
+            }
+            return schema;
+        }
+
+        public async Task<RegisteredSchema> GetLatestWithMetadataAsync(string subject,
+            IDictionary<string, string> metadata, bool ignoreDeletedSchemas)
+        {
+            var key = (subject, metadata, ignoreDeletedSchemas);
+            RegisteredSchema schema;
+            if (!latestWithMetadataBySubject.TryGetValue(key, out schema))
+            {
+                schema =  await restService.GetLatestWithMetadataAsync(subject, metadata, ignoreDeletedSchemas).ConfigureAwait(continueOnCapturedContext: false);
+                MemoryCacheEntryOptions opts = new MemoryCacheEntryOptions();
+                if (latestCacheTtlSecs > 0)
+                {
+                    opts.AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(latestCacheTtlSecs);
+                }
+
+                latestWithMetadataBySubject.Set(key, schema, opts);
+            }
+            return schema;
+        }
 
         /// <inheritdoc/>
         public Task<List<string>> GetAllSubjectsAsync()

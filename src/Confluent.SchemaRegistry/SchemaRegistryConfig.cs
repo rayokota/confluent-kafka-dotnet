@@ -53,6 +53,13 @@ namespace Confluent.SchemaRegistry
             public const string SchemaRegistryMaxCachedSchemas = "schema.registry.max.cached.schemas";
 
             /// <summary>
+            ///     Specifies the TTL for caches holding latest schemas, or -1 for no TTL.
+            ///
+            ///     default: -1
+            /// </summary>
+            public const string SchemaRegistryLatestCacheTtlSecs = "schema.registry.latest.cache.ttl.secs";
+
+            /// <summary>
             ///     Specifies the configuration property(ies) that provide the basic authentication credentials.
             ///     USER_INFO: Credentials are specified via the `schema.registry.basic.auth.user.info` config property in the form username:password.
             ///                If `schema.registry.basic.auth.user.info` is not set, authentication is disabled.
@@ -238,6 +245,18 @@ namespace Confluent.SchemaRegistry
         {
             get { return GetInt(SchemaRegistryConfig.PropertyNames.SchemaRegistryMaxCachedSchemas); }
             set { SetObject(SchemaRegistryConfig.PropertyNames.SchemaRegistryMaxCachedSchemas, value.ToString()); }
+        }
+
+
+        /// <summary>
+        ///     Specifies the TTL for caches holding latest schemas, or -1 for no TTL.
+        /// 
+        ///     default: -1
+        /// </summary>
+        public int? LatestCacheTtlSecs
+        {
+            get { return GetInt(SchemaRegistryConfig.PropertyNames.SchemaRegistryLatestCacheTtlSecs); }
+            set { SetObject(SchemaRegistryConfig.PropertyNames.SchemaRegistryLatestCacheTtlSecs, value.ToString()); }
         }
 
 

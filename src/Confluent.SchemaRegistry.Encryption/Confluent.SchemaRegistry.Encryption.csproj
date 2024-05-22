@@ -31,7 +31,6 @@
 
     <ItemGroup>
         <PackageReference Include="HKDF.Standard" Version="2.0.0" />
-        <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="6.0.1" />
         <PackageReference Include="Miscreant" Version="0.3.3" />
     </ItemGroup>
 

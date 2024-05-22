@@ -207,6 +207,7 @@ namespace Confluent.SchemaRegistry.Encryption
                 if (property.Key != SchemaRegistryConfig.PropertyNames.SchemaRegistryUrl &&
                     property.Key != SchemaRegistryConfig.PropertyNames.SchemaRegistryRequestTimeoutMs &&
                     property.Key != SchemaRegistryConfig.PropertyNames.SchemaRegistryMaxCachedSchemas &&
+                    property.Key != SchemaRegistryConfig.PropertyNames.SchemaRegistryLatestCacheTtlSecs &&
                     property.Key != SchemaRegistryConfig.PropertyNames.SchemaRegistryBasicAuthCredentialsSource &&
                     property.Key != SchemaRegistryConfig.PropertyNames.SchemaRegistryBasicAuthUserInfo &&
                     property.Key != SchemaRegistryConfig.PropertyNames.SchemaRegistryKeySubjectNameStrategy &&
@@ -400,7 +401,12 @@ namespace Confluent.SchemaRegistry.Encryption
 
         /// <inheritdoc/>
         public Task<RegisteredDek> CreateDekAsync(string kekName, Dek dek)
-            => restService.CreateDekAsync(kekName, dek);
+        {
+            // Delete latest versions
+            this.deks.Remove(new DekId(kekName, dek.Subject, -1, dek.Algorithm, false));
+            this.deks.Remove(new DekId(kekName, dek.Subject, -1, dek.Algorithm, true));
+            return restService.CreateDekAsync(kekName, dek);
+        }
         
         /// <summary>
         ///     Releases unmanaged resources owned by this CachedSchemaRegistryClient instance.
