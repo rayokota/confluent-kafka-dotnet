@@ -25,7 +25,7 @@ namespace Confluent.SchemaRegistry.Encryption
         
         public static readonly string KmsTypeSuffix = "://";
 
-        internal static readonly int LatestVersion = 1;
+        internal static readonly int LatestVersion = -1;
         internal static readonly byte MagicByte = 0x0;
         internal static readonly int MillisInDay = 24 * 60 * 60 * 1000;
         internal static readonly int VersionSize = 4;
