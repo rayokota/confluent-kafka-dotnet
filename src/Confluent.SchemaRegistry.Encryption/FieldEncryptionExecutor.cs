@@ -286,7 +286,7 @@ namespace Confluent.SchemaRegistry.Encryption
                         .ConfigureAwait(continueOnCapturedContext: false);
                 }
 
-                int? newVersion = isExpired ? dek.Version : null;
+                int? newVersion = isExpired ? dek.Version + 1 : null;
                 DekId newDekId = new DekId(kekName, ctx.Subject, newVersion, cryptor.DekFormat, isRead);
                 dek = await StoreDekToRegistry(newDekId, encryptedDek).ConfigureAwait(continueOnCapturedContext: false);
                 if (dek == null)
