@@ -14,18 +14,39 @@
 //
 // Refer to LICENSE for more information.
 
+using System;
 using System.Collections.Generic;
 using System.Runtime.Serialization;
 
 namespace Confluent.SchemaRegistry.Encryption
 {
     [DataContract]
-    public class RegisteredKek : Kek
+    public class RegisteredKek : Kek, IEquatable<RegisteredKek>
     {
         /// <summary>
         ///     The timestamp of the KEK.
         /// </summary>
         [DataMember(Name = "ts")]
         public long Timestamp { get; set; }
+
+        public bool Equals(RegisteredKek other)
+        {
+            if (ReferenceEquals(null, other)) return false;
+            if (ReferenceEquals(this, other)) return true;
+            return base.Equals(other);
+        }
+
+        public override bool Equals(object obj)
+        {
+            if (ReferenceEquals(null, obj)) return false;
+            if (ReferenceEquals(this, obj)) return true;
+            if (obj.GetType() != this.GetType()) return false;
+            return Equals((RegisteredKek)obj);
+        }
+
+        public override int GetHashCode()
+        {
+            return base.GetHashCode();
+        }
     }
 }

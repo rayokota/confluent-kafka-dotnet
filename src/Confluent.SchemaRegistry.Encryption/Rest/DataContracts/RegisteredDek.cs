@@ -14,12 +14,13 @@
 //
 // Refer to LICENSE for more information.
 
+using System;
 using System.Runtime.Serialization;
 
 namespace Confluent.SchemaRegistry.Encryption
 {
     [DataContract]
-    public class RegisteredDek : Dek
+    public class RegisteredDek : Dek, IEquatable<RegisteredDek>
     {
         private string keyMaterial;
         private byte[] keyMaterialBytes;
@@ -81,6 +82,32 @@ namespace Confluent.SchemaRegistry.Encryption
         public void SetKeyMaterial(byte[] keyMaterialBytes)
         {
             keyMaterial = keyMaterialBytes != null ? System.Convert.ToBase64String(keyMaterialBytes) : null;
+        }
+
+        public bool Equals(RegisteredDek other)
+        {
+            if (ReferenceEquals(null, other)) return false;
+            if (ReferenceEquals(this, other)) return true;
+            return base.Equals(other) && keyMaterial == other.keyMaterial && KekName == other.KekName;
+        }
+
+        public override bool Equals(object obj)
+        {
+            if (ReferenceEquals(null, obj)) return false;
+            if (ReferenceEquals(this, obj)) return true;
+            if (obj.GetType() != this.GetType()) return false;
+            return Equals((RegisteredDek)obj);
+        }
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int hashCode = base.GetHashCode();
+                hashCode = (hashCode * 397) ^ (keyMaterial != null ? keyMaterial.GetHashCode() : 0);
+                hashCode = (hashCode * 397) ^ (KekName != null ? KekName.GetHashCode() : 0);
+                return hashCode;
+            }
         }
     }
 }

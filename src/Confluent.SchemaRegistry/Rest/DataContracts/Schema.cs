@@ -252,7 +252,8 @@ namespace  Confluent.SchemaRegistry
         ///     otherwise, false. If other is null, the method returns false.
         /// </returns>
         public bool Equals(Schema other)
-            => this.SchemaString == other.SchemaString;
+            => SchemaString == other.SchemaString && Equals(References, other.References) &&
+               Equals(Metadata, other.Metadata) && Equals(RuleSet, other.RuleSet);
 
         /// <summary>
         ///     Returns a hash code for this instance.
@@ -267,7 +268,14 @@ namespace  Confluent.SchemaRegistry
         /// </remarks>
         public override int GetHashCode()
         {
-            return SchemaString.GetHashCode();
+            unchecked
+            {
+                var hashCode = SchemaString.GetHashCode();
+                hashCode = (hashCode * 397) ^ (References != null ? References.GetHashCode() : 0);
+                hashCode = (hashCode * 397) ^ (Metadata != null ? Metadata.GetHashCode() : 0);
+                hashCode = (hashCode * 397) ^ (RuleSet != null ? RuleSet.GetHashCode() : 0);
+                return hashCode;
+            }
         }
 
         /// <summary>

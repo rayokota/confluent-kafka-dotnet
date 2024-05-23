@@ -14,12 +14,13 @@
 //
 // Refer to LICENSE for more information.
 
+using System;
 using System.Runtime.Serialization;
 
 namespace Confluent.SchemaRegistry.Encryption
 {
     [DataContract]
-    public class Dek
+    public class Dek : IEquatable<Dek>
     {
         /// <summary>
         ///     The subject the DEK is registered under.
@@ -50,5 +51,34 @@ namespace Confluent.SchemaRegistry.Encryption
         /// </summary>
         [DataMember(Name = "deleted")]
         public bool Deleted { get; set; }
+
+        public bool Equals(Dek other)
+        {
+            if (ReferenceEquals(null, other)) return false;
+            if (ReferenceEquals(this, other)) return true;
+            return Subject == other.Subject && Version == other.Version && Algorithm == other.Algorithm && 
+                   EncryptedKeyMaterial == other.EncryptedKeyMaterial && Deleted == other.Deleted;
+        }
+
+        public override bool Equals(object obj)
+        {
+            if (ReferenceEquals(null, obj)) return false;
+            if (ReferenceEquals(this, obj)) return true;
+            if (obj.GetType() != this.GetType()) return false;
+            return Equals((Dek)obj);
+        }
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                var hashCode = (Subject != null ? Subject.GetHashCode() : 0);
+                hashCode = (hashCode * 397) ^ Version.GetHashCode();
+                hashCode = (hashCode * 397) ^ (int)Algorithm;
+                hashCode = (hashCode * 397) ^ (EncryptedKeyMaterial != null ? EncryptedKeyMaterial.GetHashCode() : 0);
+                hashCode = (hashCode * 397) ^ Deleted.GetHashCode();
+                return hashCode;
+            }
+        }
     }
 }

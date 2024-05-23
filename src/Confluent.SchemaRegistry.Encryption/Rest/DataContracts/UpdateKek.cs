@@ -14,13 +14,14 @@
 //
 // Refer to LICENSE for more information.
 
+using System;
 using System.Collections.Generic;
 using System.Runtime.Serialization;
 
 namespace Confluent.SchemaRegistry.Encryption
 {
     [DataContract]
-    public class UpdateKek
+    public class UpdateKek : IEquatable<UpdateKek>
     {
         /// <summary>
         ///     The KMS properties.
@@ -39,5 +40,31 @@ namespace Confluent.SchemaRegistry.Encryption
         /// </summary>
         [DataMember(Name = "shared")]
         public bool Shared { get; set; }
+
+        public bool Equals(UpdateKek other)
+        {
+            if (ReferenceEquals(null, other)) return false;
+            if (ReferenceEquals(this, other)) return true;
+            return Equals(KmsProps, other.KmsProps) && Doc == other.Doc && Shared == other.Shared;
+        }
+
+        public override bool Equals(object obj)
+        {
+            if (ReferenceEquals(null, obj)) return false;
+            if (ReferenceEquals(this, obj)) return true;
+            if (obj.GetType() != this.GetType()) return false;
+            return Equals((UpdateKek)obj);
+        }
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                var hashCode = (KmsProps != null ? KmsProps.GetHashCode() : 0);
+                hashCode = (hashCode * 397) ^ (Doc != null ? Doc.GetHashCode() : 0);
+                hashCode = (hashCode * 397) ^ Shared.GetHashCode();
+                return hashCode;
+            }
+        }
     }
 }

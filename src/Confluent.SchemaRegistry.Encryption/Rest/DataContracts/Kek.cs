@@ -14,13 +14,14 @@
 //
 // Refer to LICENSE for more information.
 
+using System;
 using System.Collections.Generic;
 using System.Runtime.Serialization;
 
 namespace Confluent.SchemaRegistry.Encryption
 {
     [DataContract]
-    public class Kek
+    public class Kek : IEquatable<Kek>
     {
         /// <summary>
         ///     The name of the KEK.
@@ -63,5 +64,38 @@ namespace Confluent.SchemaRegistry.Encryption
         /// </summary>
         [DataMember(Name = "deleted")]
         public bool Deleted { get; set; }
+        
+        public bool Equals(Kek other)
+        {
+            if (ReferenceEquals(null, other)) return false;
+            if (ReferenceEquals(this, other)) return true;
+            return Name == other.Name && KmsType == other.KmsType && 
+                   KmsKeyId == other.KmsKeyId && Equals(KmsProps, other.KmsProps) && 
+                   Doc == other.Doc && Shared == other.Shared && Deleted == other.Deleted;
+        }
+
+        public override bool Equals(object obj)
+        {
+            if (ReferenceEquals(null, obj)) return false;
+            if (ReferenceEquals(this, obj)) return true;
+            if (obj.GetType() != this.GetType()) return false;
+            return Equals((Kek)obj);
+        }
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                var hashCode = (Name != null ? Name.GetHashCode() : 0);
+                hashCode = (hashCode * 397) ^ (KmsType != null ? KmsType.GetHashCode() : 0);
+                hashCode = (hashCode * 397) ^ (KmsKeyId != null ? KmsKeyId.GetHashCode() : 0);
+                hashCode = (hashCode * 397) ^ (KmsProps != null ? KmsProps.GetHashCode() : 0);
+                hashCode = (hashCode * 397) ^ (Doc != null ? Doc.GetHashCode() : 0);
+                hashCode = (hashCode * 397) ^ Shared.GetHashCode();
+                hashCode = (hashCode * 397) ^ Deleted.GetHashCode();
+                return hashCode;
+            }
+        }
+
     }
 }

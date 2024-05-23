@@ -14,13 +14,14 @@
 //
 // Refer to LICENSE for more information.
 
+using System;
 using System.Collections.Generic;
 using System.Runtime.Serialization;
 
 namespace Confluent.SchemaRegistry
 {
     [DataContract]
-    public class Rule
+    public class Rule : IEquatable<Rule>
     {
         [DataMember(Name = "name")]
         public string Name { get; set; }
@@ -85,6 +86,43 @@ namespace Confluent.SchemaRegistry
             OnSuccess = onSuccess;
             OnFailure = onFailure;
             Disabled = disabled;
+        }
+
+        public bool Equals(Rule other)
+        {
+            if (ReferenceEquals(null, other)) return false;
+            if (ReferenceEquals(this, other)) return true;
+            return Name == other.Name && Doc == other.Doc && Kind == other.Kind && Mode == other.Mode &&
+                   Type == other.Type && Equals(Tags, other.Tags) && Equals(Params, other.Params) &&
+                   Expr == other.Expr && OnSuccess == other.OnSuccess && OnFailure == other.OnFailure &&
+                   Disabled == other.Disabled;
+        }
+
+        public override bool Equals(object obj)
+        {
+            if (ReferenceEquals(null, obj)) return false;
+            if (ReferenceEquals(this, obj)) return true;
+            if (obj.GetType() != this.GetType()) return false;
+            return Equals((Rule)obj);
+        }
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                var hashCode = (Name != null ? Name.GetHashCode() : 0);
+                hashCode = (hashCode * 397) ^ (Doc != null ? Doc.GetHashCode() : 0);
+                hashCode = (hashCode * 397) ^ (int)Kind;
+                hashCode = (hashCode * 397) ^ (int)Mode;
+                hashCode = (hashCode * 397) ^ (Type != null ? Type.GetHashCode() : 0);
+                hashCode = (hashCode * 397) ^ (Tags != null ? Tags.GetHashCode() : 0);
+                hashCode = (hashCode * 397) ^ (Params != null ? Params.GetHashCode() : 0);
+                hashCode = (hashCode * 397) ^ (Expr != null ? Expr.GetHashCode() : 0);
+                hashCode = (hashCode * 397) ^ (OnSuccess != null ? OnSuccess.GetHashCode() : 0);
+                hashCode = (hashCode * 397) ^ (OnFailure != null ? OnFailure.GetHashCode() : 0);
+                hashCode = (hashCode * 397) ^ Disabled.GetHashCode();
+                return hashCode;
+            }
         }
     }
 }

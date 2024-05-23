@@ -14,6 +14,7 @@
 //
 // Refer to LICENSE for more information.
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.Serialization;
@@ -21,7 +22,7 @@ using System.Runtime.Serialization;
 namespace Confluent.SchemaRegistry
 {
     [DataContract]
-    public class RuleSet
+    public class RuleSet : IEquatable<RuleSet>
     {
         [DataMember(Name = "migrationRules")]
         public IList<Rule> MigrationRules { get; set; }
@@ -57,5 +58,28 @@ namespace Confluent.SchemaRegistry
         }
       }
 
+      public bool Equals(RuleSet other)
+      {
+        if (ReferenceEquals(null, other)) return false;
+        if (ReferenceEquals(this, other)) return true;
+        return Equals(MigrationRules, other.MigrationRules) && Equals(DomainRules, other.DomainRules);
+      }
+
+      public override bool Equals(object obj)
+      {
+        if (ReferenceEquals(null, obj)) return false;
+        if (ReferenceEquals(this, obj)) return true;
+        if (obj.GetType() != this.GetType()) return false;
+        return Equals((RuleSet)obj);
+      }
+
+      public override int GetHashCode()
+      {
+        unchecked
+        {
+          return ((MigrationRules != null ? MigrationRules.GetHashCode() : 0) * 397) ^ 
+                 (DomainRules != null ? DomainRules.GetHashCode() : 0);
+        }
+      }
     }
 }
