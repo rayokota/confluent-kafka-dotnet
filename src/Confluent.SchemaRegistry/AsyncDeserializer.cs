@@ -32,7 +32,8 @@ namespace Confluent.SchemaRegistry
         
         protected readonly int headerSize =  sizeof(int) + sizeof(byte);
         
-        protected readonly IDictionary<int, (Schema, TParsedSchema)> schemaCache = new Dictionary<int, (Schema, TParsedSchema)>();
+        protected readonly IDictionary<int, Schema> schemaCache = new Dictionary<int, Schema>();
+        protected readonly IDictionary<Schema, TParsedSchema> parsedSchemaCache = new Dictionary<Schema, TParsedSchema>();
         
         protected SemaphoreSlim deserializeMutex = new SemaphoreSlim(1);
 
@@ -57,20 +58,13 @@ namespace Confluent.SchemaRegistry
         }
         public abstract Task<T> DeserializeAsync(ReadOnlyMemory<byte> data, bool isNull, SerializationContext context);
 
-        protected abstract Task<TParsedSchema> ParseSchema(Schema schema);
-
         protected async Task<(Schema, TParsedSchema)> GetSchema(int writerId)
         {
-            Schema writerSchema;
-            TParsedSchema parsedSchema;
             await deserializeMutex.WaitAsync().ConfigureAwait(continueOnCapturedContext: false);
             try
             {
-                if (schemaCache.TryGetValue(writerId, out var tuple))
-                {
-                    (writerSchema, parsedSchema) = tuple;
-                }
-                else
+                Schema writerSchema;
+                if (!schemaCache.TryGetValue(writerId, out writerSchema))
                 {
                     if (schemaCache.Count > schemaRegistryClient.MaxCachedSchemas)
                     {
@@ -78,16 +72,43 @@ namespace Confluent.SchemaRegistry
                     }
 
                     writerSchema = await schemaRegistryClient.GetSchemaAsync(writerId).ConfigureAwait(continueOnCapturedContext: false);
-                    parsedSchema = await ParseSchema(writerSchema).ConfigureAwait(continueOnCapturedContext: false);
-                    schemaCache[writerId] = (writerSchema, parsedSchema);
+                    schemaCache[writerId] = writerSchema;
                 }
+
+                TParsedSchema parsedSchema = await GetParsedSchema(writerSchema);
+                return (writerSchema, parsedSchema);
             }
             finally
             {
                 deserializeMutex.Release();
             }
-
-            return (writerSchema, parsedSchema);
         }
+
+        protected async Task<TParsedSchema> GetParsedSchema(Schema schema)
+        {
+            await deserializeMutex.WaitAsync().ConfigureAwait(continueOnCapturedContext: false);
+            try
+            {
+                TParsedSchema parsedSchema;
+                if (!parsedSchemaCache.TryGetValue(schema, out parsedSchema))
+                {
+                    if (parsedSchemaCache.Count > schemaRegistryClient.MaxCachedSchemas)
+                    {
+                        parsedSchemaCache.Clear();
+                    }
+
+                    parsedSchema = await ParseSchema(schema).ConfigureAwait(continueOnCapturedContext: false);
+                    parsedSchemaCache[schema] = parsedSchema;
+                }
+
+                return parsedSchema;
+            }
+            finally
+            {
+                deserializeMutex.Release();
+            }
+        }
+        
+        protected abstract Task<TParsedSchema> ParseSchema(Schema schema);
     }
 }

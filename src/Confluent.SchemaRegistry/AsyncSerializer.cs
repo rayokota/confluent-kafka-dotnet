@@ -41,6 +41,8 @@ namespace Confluent.SchemaRegistry
         protected ISchemaRegistryClient schemaRegistryClient;
         protected IList<IRuleExecutor> ruleExecutors;
         
+        protected readonly IDictionary<Schema, TParsedSchema> parsedSchemaCache = new Dictionary<Schema, TParsedSchema>();
+        
         protected HashSet<string> subjectsRegistered = new HashSet<string>();
         protected SemaphoreSlim serializeMutex = new SemaphoreSlim(1);
         
@@ -61,6 +63,31 @@ namespace Confluent.SchemaRegistry
         }
 
         public abstract Task<byte[]> SerializeAsync(T value, SerializationContext context);
+        
+        protected async Task<TParsedSchema> GetParsedSchema(Schema schema)
+        {
+            await serializeMutex.WaitAsync().ConfigureAwait(continueOnCapturedContext: false);
+            try
+            {
+                TParsedSchema parsedSchema;
+                if (!parsedSchemaCache.TryGetValue(schema, out parsedSchema))
+                {
+                    if (parsedSchemaCache.Count > schemaRegistryClient.MaxCachedSchemas)
+                    {
+                        parsedSchemaCache.Clear();
+                    }
+
+                    parsedSchema = await ParseSchema(schema).ConfigureAwait(continueOnCapturedContext: false);
+                    parsedSchemaCache[schema] = parsedSchema;
+                }
+
+                return parsedSchema;
+            }
+            finally
+            {
+                serializeMutex.Release();
+            }
+        }
         
         protected abstract Task<TParsedSchema> ParseSchema(Schema schema);
     }
