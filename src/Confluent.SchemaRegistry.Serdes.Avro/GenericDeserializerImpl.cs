@@ -131,7 +131,7 @@ namespace Confluent.SchemaRegistry.Serdes
                         json = await SerdeUtils.ExecuteMigrations(migrations, isKey, subject, topic, headers, json)
                             .ContinueWith(t => (JToken)t.Result)
                             .ConfigureAwait(continueOnCapturedContext: false);
-                        var latestSchemaAvro = Avro.Schema.Parse(latestSchema.SchemaString);
+                        var latestSchemaAvro = ParseSchema(latestSchema).Result;
                         Avro.IO.Decoder decoder = new JsonDecoder(latestSchemaAvro, json.ToString(Formatting.None));
                         
                         datumReader = new GenericReader<GenericRecord>(latestSchemaAvro, latestSchemaAvro);

@@ -185,8 +185,7 @@ namespace Confluent.SchemaRegistry.Serdes
                 
                 if (latestSchema != null)
                 {
-                    // TODO cache
-                    var laterSchemaJson = await JsonSchema.FromJsonAsync(latestSchema).ConfigureAwait(false);
+                    var laterSchemaJson = await ParseSchema(latestSchema).ConfigureAwait(false);
                     FieldTransformer fieldTransformer = async (ctx, transform, message) =>
                     {
                         return await JsonUtils.Transform(ctx, laterSchemaJson, "$", message, transform).ConfigureAwait(false);

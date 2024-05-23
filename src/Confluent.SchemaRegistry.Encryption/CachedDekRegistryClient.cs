@@ -402,10 +402,16 @@ namespace Confluent.SchemaRegistry.Encryption
         /// <inheritdoc/>
         public Task<RegisteredDek> CreateDekAsync(string kekName, Dek dek)
         {
-            // Delete latest versions
-            this.deks.Remove(new DekId(kekName, dek.Subject, -1, dek.Algorithm, false));
-            this.deks.Remove(new DekId(kekName, dek.Subject, -1, dek.Algorithm, true));
-            return restService.CreateDekAsync(kekName, dek);
+            try
+            {
+                return restService.CreateDekAsync(kekName, dek);
+            }
+            finally
+            {
+                // Ensure latest dek is invalidated, such as in case of conflict (409)
+                this.deks.Remove(new DekId(kekName, dek.Subject, -1, dek.Algorithm, false));
+                this.deks.Remove(new DekId(kekName, dek.Subject, -1, dek.Algorithm, true));
+            }
         }
         
         /// <summary>

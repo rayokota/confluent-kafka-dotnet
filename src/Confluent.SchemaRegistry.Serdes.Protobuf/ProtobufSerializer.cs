@@ -304,10 +304,7 @@ namespace Confluent.SchemaRegistry.Serdes
 
                 if (latestSchema != null)
                 {
-                    IDictionary<string, string> references = await SerdeUtils.ResolveReferences(schemaRegistryClient, latestSchema)
-                            .ConfigureAwait(continueOnCapturedContext: false);
-                    // TODO cache
-                    var fdSet = ProtobufUtils.Parse(latestSchema.SchemaString, references);
+                    var fdSet = await ParseSchema(latestSchema).ConfigureAwait(false);
                     FieldTransformer fieldTransformer = async (ctx, transform, message) =>
                     {
                         return await ProtobufUtils.Transform(ctx, fdSet, message, transform).ConfigureAwait(false);

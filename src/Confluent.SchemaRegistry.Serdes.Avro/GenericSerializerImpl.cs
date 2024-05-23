@@ -187,8 +187,7 @@ namespace Confluent.SchemaRegistry.Serdes
 
                 if (latestSchema != null)
                 {
-                    // TODO cache
-                    var schema = Avro.Schema.Parse(latestSchema.SchemaString);
+                    var schema = ParseSchema(latestSchema).Result;
                     FieldTransformer fieldTransformer = async (ctx, transform, message) => 
                     {
                         return await AvroUtils.Transform(ctx, schema, message, transform).ConfigureAwait(false);
