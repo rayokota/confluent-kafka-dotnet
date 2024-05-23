@@ -91,7 +91,7 @@ namespace Confluent.SchemaRegistry.Serdes
                 string subject;
                 RegisteredSchema latestSchema = null;
                 Avro.RecordSchema writerSchema;
-                await serializeMutex.WaitAsync().ConfigureAwait(continueOnCapturedContext: false);
+                await serdeMutex.WaitAsync().ConfigureAwait(continueOnCapturedContext: false);
                 try
                 {
                     // TODO: If any of these caches fills up, this is probably an
@@ -142,7 +142,7 @@ namespace Confluent.SchemaRegistry.Serdes
                     var subjectSchemaPair = new KeyValuePair<string, string>(subject, writerSchemaString);
                     if (!registeredSchemas.Contains(subjectSchemaPair))
                     {
-                        latestSchema = await SerdeUtils.GetReaderSchema(schemaRegistryClient, subject, useLatestWithMetadata, useLatestVersion)
+                        latestSchema = await GetReaderSchema(subject)
                             .ConfigureAwait(continueOnCapturedContext: false);
                         int newSchemaId;
                         if (latestSchema != null)
@@ -182,7 +182,7 @@ namespace Confluent.SchemaRegistry.Serdes
                 }
                 finally
                 {
-                    serializeMutex.Release();
+                    serdeMutex.Release();
                 }
 
                 if (latestSchema != null)
@@ -192,8 +192,8 @@ namespace Confluent.SchemaRegistry.Serdes
                     {
                         return await AvroUtils.Transform(ctx, schema, message, transform).ConfigureAwait(false);
                     };
-                    data = await SerdeUtils.ExecuteRules(isKey, subject, topic, headers, RuleMode.Write, null,
-                        latestSchema, data, fieldTransformer, ruleExecutors)
+                    data = await ExecuteRules(isKey, subject, topic, headers, RuleMode.Write, null,
+                        latestSchema, data, fieldTransformer)
                         .ContinueWith(t => (GenericRecord)t.Result)
                         .ConfigureAwait(continueOnCapturedContext: false);
                 }

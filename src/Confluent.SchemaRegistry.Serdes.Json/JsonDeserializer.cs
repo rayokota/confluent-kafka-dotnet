@@ -134,7 +134,7 @@ namespace Confluent.SchemaRegistry.Serdes
                         ? schemaRegistryClient.ConstructKeySubjectName(topic)
                         : schemaRegistryClient.ConstructValueSubjectName(topic);
             
-            Schema latestSchema = await SerdeUtils.GetReaderSchema(schemaRegistryClient, subject, useLatestWithMetadata, useLatestVersion)
+            Schema latestSchema = await GetReaderSchema(subject)
                 .ConfigureAwait(continueOnCapturedContext: false);
                 
             try
@@ -165,7 +165,7 @@ namespace Confluent.SchemaRegistry.Serdes
                     
                     if (latestSchema != null)
                     {
-                        migrations = await SerdeUtils.GetMigrations(schemaRegistryClient, subject, writerSchema, latestSchema)
+                        migrations = await GetMigrations(subject, writerSchema, latestSchema)
                             .ConfigureAwait(continueOnCapturedContext: false);
                     }
 
@@ -175,7 +175,7 @@ namespace Confluent.SchemaRegistry.Serdes
                         using (var jsonReader = new StreamReader(jsonStream, Encoding.UTF8))
                         {
                             JToken json = Newtonsoft.Json.JsonConvert.DeserializeObject<JToken>(jsonReader.ReadToEnd(), this.jsonSchemaGeneratorSettings?.ActualSerializerSettings);
-                            json = await SerdeUtils.ExecuteMigrations(migrations, isKey, subject, topic, context.Headers, json)
+                            json = await ExecuteMigrations(migrations, isKey, subject, topic, context.Headers, json)
                                 .ContinueWith(t => (JToken)t.Result)
                                 .ConfigureAwait(continueOnCapturedContext: false);
                             value = json.ToObject<T>();
@@ -199,9 +199,9 @@ namespace Confluent.SchemaRegistry.Serdes
                     {
                         return await JsonUtils.Transform(ctx, writerSchemaJson, "$", message, transform).ConfigureAwait(false);
                     };
-                    value = await SerdeUtils.ExecuteRules(context.Component == MessageComponentType.Key, subject,
+                    value = await ExecuteRules(context.Component == MessageComponentType.Key, subject,
                             context.Topic, context.Headers, RuleMode.Read, null,
-                            writerSchema, value, fieldTransformer, ruleExecutors)
+                            writerSchema, value, fieldTransformer)
                         .ContinueWith(t => (T)t.Result)
                         .ConfigureAwait(continueOnCapturedContext: false);
                 } 

@@ -192,8 +192,8 @@ namespace Confluent.SchemaRegistry.Serdes
                     {
                         return await ProtobufUtils.Transform(ctx, fdSet, message, transform).ConfigureAwait(false);
                     };
-                    message = await SerdeUtils.ExecuteRules(context.Component == MessageComponentType.Key, subject, context.Topic, context.Headers, RuleMode.Read, null,
-                        writerSchema, message, fieldTransformer, ruleExecutors)
+                    message = await ExecuteRules(context.Component == MessageComponentType.Key, subject, context.Topic, context.Headers, RuleMode.Read, null,
+                        writerSchema, message, fieldTransformer)
                         .ContinueWith(t => (T)t.Result)
                         .ConfigureAwait(continueOnCapturedContext: false);
                 }
@@ -208,7 +208,7 @@ namespace Confluent.SchemaRegistry.Serdes
 
         protected override async Task<FileDescriptorSet> ParseSchema(Schema schema)
         {
-            IDictionary<string, string> references = await SerdeUtils.ResolveReferences(schemaRegistryClient, schema)
+            IDictionary<string, string> references = await ResolveReferences(schema)
                 .ConfigureAwait(continueOnCapturedContext: false);
             return ProtobufUtils.Parse(schema.SchemaString, references);
         }

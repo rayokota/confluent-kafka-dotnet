@@ -1,4 +1,4 @@
-// Copyright 2022 Confluent Inc.
+// Copyright 2020 Confluent Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,44 +14,84 @@
 //
 // Refer to LICENSE for more information.
 
+// Disable obsolete warnings. ConstructValueSubjectName is still used a an internal implementation detail.
+#pragma warning disable CS0618
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.Serialization;
+using System.Threading;
 using System.Threading.Tasks;
 using Confluent.Kafka;
 
 
 namespace Confluent.SchemaRegistry
 {
-    public class Migration
+    public abstract class AsyncSerde<TParsedSchema>
     {
-        public Migration(RuleMode ruleMode, Schema source, Schema target)
+        protected ISchemaRegistryClient schemaRegistryClient;
+        protected IList<IRuleExecutor> ruleExecutors;
+        
+        protected bool useLatestVersion = false;
+        protected IDictionary<string, string> useLatestWithMetadata = null;
+        protected SubjectNameStrategyDelegate subjectNameStrategy = null;
+        
+        protected SemaphoreSlim serdeMutex = new SemaphoreSlim(1);
+        
+        private readonly IDictionary<Schema, TParsedSchema> parsedSchemaCache = new Dictionary<Schema, TParsedSchema>();
+        private SemaphoreSlim parsedSchemaMutex = new SemaphoreSlim(1);
+        
+        protected AsyncSerde(ISchemaRegistryClient schemaRegistryClient, SerdeConfig config, IList<IRuleExecutor> ruleExecutors = null)
         {
-            RuleMode = ruleMode;
-            Source = source;
-            Target = target;
+            this.schemaRegistryClient = schemaRegistryClient;
+            this.ruleExecutors = ruleExecutors ?? new List<IRuleExecutor>();
+
+            if (config == null) { return; }
+            
+            foreach (IRuleExecutor executor in this.ruleExecutors.Concat(RuleRegistry.GetRuleExecutors()))
+            {
+                IEnumerable<KeyValuePair<string, string>> ruleConfigs = config
+                    .Select(kv => new KeyValuePair<string, string>(
+                        kv.Key.StartsWith("rules.") ? kv.Key.Substring("rules.".Length) : kv.Key, kv.Value));
+                executor.Configure(ruleConfigs); 
+            }
+        }
+
+        protected async Task<(Schema, TParsedSchema)> GetSchema(int writerId)
+        {
+            Schema writerSchema = await schemaRegistryClient.GetSchemaAsync(writerId).ConfigureAwait(continueOnCapturedContext: false);
+            TParsedSchema parsedSchema = await GetParsedSchema(writerSchema);
+            return (writerSchema, parsedSchema);
+        }
+
+        protected async Task<TParsedSchema> GetParsedSchema(Schema schema)
+        {
+            await parsedSchemaMutex.WaitAsync().ConfigureAwait(continueOnCapturedContext: false);
+            try
+            {
+                if (!parsedSchemaCache.TryGetValue(schema, out TParsedSchema parsedSchema))
+                {
+                    if (parsedSchemaCache.Count > schemaRegistryClient.MaxCachedSchemas)
+                    {
+                        parsedSchemaCache.Clear();
+                    }
+
+                    parsedSchema = await ParseSchema(schema).ConfigureAwait(continueOnCapturedContext: false);
+                    parsedSchemaCache[schema] = parsedSchema;
+                }
+
+                return parsedSchema;
+            }
+            finally
+            {
+                parsedSchemaMutex.Release();
+            }
         }
         
-        public RuleMode RuleMode { get; set; }
+        protected abstract Task<TParsedSchema> ParseSchema(Schema schema);
         
-        public Schema Source { get; set; }
-        
-        public Schema Target { get; set; }
-    }
-    
-    /// <summary>
-    ///     Serde utilities
-    /// </summary>
-    public static class SerdeUtils
-    {
-        /// <summary>
-        ///     Resolve references
-        /// </summary>
-        /// <param name="client"></param>
-        /// <param name="schema"></param>
-        /// <returns></returns>
-        public static async Task<IDictionary<string, string>> ResolveReferences(ISchemaRegistryClient client, Schema schema)
+        protected async Task<IDictionary<string, string>> ResolveReferences(Schema schema)
         {
             IList<SchemaReference> references = schema.References;
             if (references == null)
@@ -61,13 +101,13 @@ namespace Confluent.SchemaRegistry
 
             IDictionary<string, string> result = new Dictionary<string, string>();
             ISet<string> visited = new HashSet<string>();
-            result = await ResolveReferences(client, schema, result, visited)
+            result = await ResolveReferences(schema, result, visited)
                 .ConfigureAwait(continueOnCapturedContext: false);
             return result;
         }
         
-        private static async Task<IDictionary<string, string>> ResolveReferences(
-            ISchemaRegistryClient client, Schema schema, IDictionary<string, string> schemas, ISet<string> visited)
+        private async Task<IDictionary<string, string>> ResolveReferences(
+            Schema schema, IDictionary<string, string> schemas, ISet<string> visited)
         {
             IList<SchemaReference> references = schema.References;
             foreach (SchemaReference reference in references)
@@ -80,14 +120,14 @@ namespace Confluent.SchemaRegistry
                 visited.Add(reference.Name);
                 if (!schemas.ContainsKey(reference.Name))
                 {
-                    Schema s = await client.GetRegisteredSchemaAsync(reference.Subject, reference.Version)
+                    Schema s = await schemaRegistryClient.GetRegisteredSchemaAsync(reference.Subject, reference.Version)
                         .ConfigureAwait(continueOnCapturedContext: false);
                     if (s == null)
                     {
                         throw new SerializationException("Could not find schema " + reference.Subject + "-" + reference.Version);
                     }
                     schemas[reference.Name] = s.SchemaString;
-                    await ResolveReferences(client, s, schemas, visited)
+                    await ResolveReferences(s, schemas, visited)
                         .ConfigureAwait(continueOnCapturedContext: false);
                 }
             }
@@ -95,11 +135,7 @@ namespace Confluent.SchemaRegistry
             return schemas;
         }
 
-        public static async Task<IList<Migration>> GetMigrations(
-            ISchemaRegistryClient client, 
-            string subject, 
-            Schema writerSchema,
-            Schema readerSchema)
+        protected async Task<IList<Migration>> GetMigrations(string subject, Schema writerSchema, Schema readerSchema)
         {
             RuleMode migrationMode;
             Schema first;
@@ -122,7 +158,7 @@ namespace Confluent.SchemaRegistry
                 return migrations;
             }
 
-            IList<Schema> versions = await GetSchemasBetween(client, subject, first, last)
+            IList<Schema> versions = await GetSchemasBetween(subject, first, last)
                 .ConfigureAwait(continueOnCapturedContext: false);
             Schema previous = null;
             for (int i = 0; i < versions.Count; i++) {
@@ -150,11 +186,7 @@ namespace Confluent.SchemaRegistry
             return migrations;
         }
 
-        private static async Task<IList<Schema>> GetSchemasBetween(
-            ISchemaRegistryClient client,
-            string subject,
-            Schema first,
-            Schema last)
+        private async Task<IList<Schema>> GetSchemasBetween(string subject, Schema first, Schema last)
         {
             if (last.Version - first.Version <= 1)
             {
@@ -165,7 +197,7 @@ namespace Confluent.SchemaRegistry
             int version1 = first.Version;
             int version2 = last.Version;
             for (int i = version1 + 1; i < version2; i++) {
-                tasks.Add(client.GetRegisteredSchemaAsync(subject, i));
+                tasks.Add(schemaRegistryClient.GetRegisteredSchemaAsync(subject, i));
             }
             RegisteredSchema[] schemas = await Task.WhenAll(tasks).ConfigureAwait(continueOnCapturedContext: false);
 
@@ -176,31 +208,27 @@ namespace Confluent.SchemaRegistry
             return result;
         }
         
-        public static async Task<RegisteredSchema> GetReaderSchema(
-            ISchemaRegistryClient client, 
-            string subject, 
-            IDictionary<string, string> useLatestMetadata, 
-            bool useLatestVersion)
+        protected async Task<RegisteredSchema> GetReaderSchema(string subject)
         {
-            if (client == null)
+            if (schemaRegistryClient == null)
             {
                 return null;
             }
-            if (useLatestMetadata != null && useLatestMetadata.Any())
+            if (useLatestWithMetadata != null && useLatestWithMetadata.Any())
             {
-                return await client.GetLatestWithMetadataAsync(subject, useLatestMetadata, false)
+                return await schemaRegistryClient.GetLatestWithMetadataAsync(subject, useLatestWithMetadata, false)
                     .ConfigureAwait(continueOnCapturedContext: false);
             }
             if (useLatestVersion)
             {
-                return await client.GetLatestSchemaAsync(subject)
+                return await schemaRegistryClient.GetLatestSchemaAsync(subject)
                     .ConfigureAwait(continueOnCapturedContext: false);
             }
 
             return null;
         }
         
-        public static async Task<object> ExecuteMigrations(
+        protected async Task<object> ExecuteMigrations(
             IList<Migration> migrations, 
             bool isKey,
             String subject, 
@@ -211,7 +239,7 @@ namespace Confluent.SchemaRegistry
             foreach (Migration m in migrations)
             {
                 message = await ExecuteRules(isKey, subject, topic, headers, m.RuleMode,
-                    m.Source, m.Target, message, null, null).ConfigureAwait(continueOnCapturedContext: false);
+                    m.Source, m.Target, message, null).ConfigureAwait(continueOnCapturedContext: false);
             }
             return message;
         }
@@ -230,7 +258,7 @@ namespace Confluent.SchemaRegistry
         /// <returns></returns>
         /// <exception cref="RuleConditionException"></exception>
         /// <exception cref="ArgumentException"></exception>
-        public static async Task<object> ExecuteRules(
+        protected async Task<object> ExecuteRules(
             bool isKey, 
             string subject, 
             string topic, 
@@ -239,8 +267,7 @@ namespace Confluent.SchemaRegistry
             Schema source, 
             Schema target, 
             object message,
-            FieldTransformer fieldTransformer,
-            IList<IRuleExecutor> ruleExecutors)
+            FieldTransformer fieldTransformer)
         {
             if (message == null || target == null)
             {
@@ -424,6 +451,48 @@ namespace Confluent.SchemaRegistry
             }
             RuleRegistry.TryGetRuleAction(actionName.ToUpper(), out IRuleAction action);
             return action;
+        }
+    }
+    
+    public class Migration : IEquatable<Migration>
+    {
+        public Migration(RuleMode ruleMode, Schema source, Schema target)
+        {
+            RuleMode = ruleMode;
+            Source = source;
+            Target = target;
+        }
+        
+        public RuleMode RuleMode { get; set; }
+        
+        public Schema Source { get; set; }
+        
+        public Schema Target { get; set; }
+
+        public bool Equals(Migration other)
+        {
+            if (ReferenceEquals(null, other)) return false;
+            if (ReferenceEquals(this, other)) return true;
+            return RuleMode == other.RuleMode && Equals(Source, other.Source) && Equals(Target, other.Target);
+        }
+
+        public override bool Equals(object obj)
+        {
+            if (ReferenceEquals(null, obj)) return false;
+            if (ReferenceEquals(this, obj)) return true;
+            if (obj.GetType() != this.GetType()) return false;
+            return Equals((Migration)obj);
+        }
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                var hashCode = (int)RuleMode;
+                hashCode = (hashCode * 397) ^ (Source != null ? Source.GetHashCode() : 0);
+                hashCode = (hashCode * 397) ^ (Target != null ? Target.GetHashCode() : 0);
+                return hashCode;
+            }
         }
     }
 }

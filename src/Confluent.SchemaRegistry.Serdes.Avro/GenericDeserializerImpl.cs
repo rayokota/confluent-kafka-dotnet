@@ -83,7 +83,7 @@ namespace Confluent.SchemaRegistry.Serdes
                             ? schemaRegistryClient.ConstructKeySubjectName(topic)
                             : schemaRegistryClient.ConstructValueSubjectName(topic);
                 
-                Schema latestSchema = await SerdeUtils.GetReaderSchema(schemaRegistryClient, subject, useLatestWithMetadata, useLatestVersion)
+                Schema latestSchema = await GetReaderSchema(subject)
                     .ConfigureAwait(continueOnCapturedContext: false);
 
                 Schema writerSchemaJson;
@@ -104,7 +104,7 @@ namespace Confluent.SchemaRegistry.Serdes
                     
                     if (latestSchema != null)
                     {
-                        migrations = await SerdeUtils.GetMigrations(schemaRegistryClient, subject, writerSchemaJson, latestSchema)
+                        migrations = await GetMigrations(subject, writerSchemaJson, latestSchema)
                             .ConfigureAwait(continueOnCapturedContext: false);
                     }
 
@@ -128,7 +128,7 @@ namespace Confluent.SchemaRegistry.Serdes
                         }
                         
                         JToken json = JToken.Parse(jsonString);
-                        json = await SerdeUtils.ExecuteMigrations(migrations, isKey, subject, topic, headers, json)
+                        json = await ExecuteMigrations(migrations, isKey, subject, topic, headers, json)
                             .ContinueWith(t => (JToken)t.Result)
                             .ConfigureAwait(continueOnCapturedContext: false);
                         var latestSchemaAvro = GetParsedSchema(latestSchema).Result;
@@ -148,8 +148,8 @@ namespace Confluent.SchemaRegistry.Serdes
                 {
                     return await AvroUtils.Transform(ctx, writerSchema, message, transform).ConfigureAwait(false);
                 };
-                data = await SerdeUtils.ExecuteRules(isKey, subject, topic, headers, RuleMode.Read, null,
-                    writerSchemaJson, data, fieldTransformer, ruleExecutors)
+                data = await ExecuteRules(isKey, subject, topic, headers, RuleMode.Read, null,
+                    writerSchemaJson, data, fieldTransformer)
                     .ContinueWith(t => (GenericRecord)t.Result)
                     .ConfigureAwait(continueOnCapturedContext: false);
 
@@ -169,7 +169,7 @@ namespace Confluent.SchemaRegistry.Serdes
         private async Task<DatumReader<GenericRecord>> GetDatumReader(Avro.Schema writerSchema, Avro.Schema readerSchema)
         {
             DatumReader<GenericRecord> datumReader;
-            await deserializeMutex.WaitAsync().ConfigureAwait(continueOnCapturedContext: false);
+            await serdeMutex.WaitAsync().ConfigureAwait(continueOnCapturedContext: false);
             try
             {
                 if (datumReaderBySchema.TryGetValue((writerSchema, readerSchema), out datumReader))
@@ -195,7 +195,7 @@ namespace Confluent.SchemaRegistry.Serdes
             }
             finally
             {
-                deserializeMutex.Release();
+                serdeMutex.Release();
             }
         }
     }

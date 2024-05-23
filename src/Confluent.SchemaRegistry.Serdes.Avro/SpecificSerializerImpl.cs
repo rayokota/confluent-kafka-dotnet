@@ -181,7 +181,7 @@ namespace Confluent.SchemaRegistry.Serdes
                 string subject;
                 RegisteredSchema latestSchema = null;
                 SerializerSchemaData currentSchemaData;
-                await serializeMutex.WaitAsync().ConfigureAwait(continueOnCapturedContext: false);
+                await serdeMutex.WaitAsync().ConfigureAwait(continueOnCapturedContext: false);
                 try
                 {
                     if (singleSchemaData == null)
@@ -214,7 +214,7 @@ namespace Confluent.SchemaRegistry.Serdes
 
                     if (!currentSchemaData.SubjectsRegistered.Contains(subject))
                     {
-                        latestSchema = await SerdeUtils.GetReaderSchema(schemaRegistryClient, subject, useLatestWithMetadata, useLatestVersion)
+                        latestSchema = await GetReaderSchema(subject)
                             .ConfigureAwait(continueOnCapturedContext: false);
                         if (latestSchema != null)
                         {
@@ -237,7 +237,7 @@ namespace Confluent.SchemaRegistry.Serdes
                 }
                 finally
                 {
-                    serializeMutex.Release();
+                    serdeMutex.Release();
                 }
 
                 if (latestSchema != null)
@@ -247,8 +247,8 @@ namespace Confluent.SchemaRegistry.Serdes
                     {
                         return await AvroUtils.Transform(ctx, schema, message, transform).ConfigureAwait(false);
                     };
-                    data = await SerdeUtils.ExecuteRules(isKey, subject, topic, headers, RuleMode.Write, null,
-                        latestSchema, data, fieldTransformer, ruleExecutors)
+                    data = await ExecuteRules(isKey, subject, topic, headers, RuleMode.Write, null,
+                        latestSchema, data, fieldTransformer)
                         .ContinueWith(t => (T) t.Result)
                         .ConfigureAwait(continueOnCapturedContext: false);
                 }
