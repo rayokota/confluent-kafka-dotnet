@@ -37,17 +37,11 @@ namespace Confluent.SchemaRegistry.Serdes
     /// </remarks>
     public class AvroSerializer<T> : IAsyncSerializer<T>
     {
-        private bool autoRegisterSchema = true;
-        private bool normalizeSchemas = false;
-        private bool useLatestVersion = false;
-        private IDictionary<string, string> useLatestWithMetadata = null;
-        private int initialBufferSize = DefaultInitialBufferSize;
-        private SubjectNameStrategyDelegate subjectNameStrategy = null;
-
-        private IAvroSerializerImpl<T> serializerImpl;
-
         private ISchemaRegistryClient schemaRegistryClient;
+        private AvroSerializerConfig config;
         private IList<IRuleExecutor> ruleExecutors;
+
+        private IAsyncSerializer<T> serializerImpl;
 
         /// <summary>
         ///     The default initial size (in bytes) of buffers used for message 
@@ -91,8 +85,9 @@ namespace Confluent.SchemaRegistry.Serdes
         public AvroSerializer(ISchemaRegistryClient schemaRegistryClient, AvroSerializerConfig config = null, IList<IRuleExecutor> ruleExecutors = null)
         {
             this.schemaRegistryClient = schemaRegistryClient;
+            this.config = config;
             this.ruleExecutors = ruleExecutors ?? new List<IRuleExecutor>();
-
+            
             if (config == null) { return; }
 
             var nonAvroConfig = config
@@ -114,26 +109,6 @@ namespace Confluent.SchemaRegistry.Serdes
                 {
                     throw new ArgumentException($"AvroSerializer: unknown configuration property {property.Key}");
                 }
-            }
-
-            if (config.BufferBytes != null) { this.initialBufferSize = config.BufferBytes.Value; }
-            if (config.AutoRegisterSchemas != null) { this.autoRegisterSchema = config.AutoRegisterSchemas.Value; }
-            if (config.NormalizeSchemas != null) { this.normalizeSchemas = config.NormalizeSchemas.Value; }
-            if (config.UseLatestVersion != null) { this.useLatestVersion = config.UseLatestVersion.Value; }
-            if (config.UseLatestWithMetadata != null) { this.useLatestWithMetadata = config.UseLatestWithMetadata; }
-            if (config.SubjectNameStrategy != null) { this.subjectNameStrategy = config.SubjectNameStrategy.Value.ToDelegate(); }
-
-            if (this.useLatestVersion && this.autoRegisterSchema)
-            {
-                throw new ArgumentException($"AvroSerializer: cannot enable both use.latest.version and auto.register.schemas");
-            }
-
-            foreach (IRuleExecutor executor in this.ruleExecutors.Concat(RuleRegistry.GetRuleExecutors()))
-            {
-                IEnumerable<KeyValuePair<string, string>> ruleConfigs = config
-                    .Select(kv => new KeyValuePair<string, string>(
-                        kv.Key.StartsWith("rules.") ? kv.Key.Substring("rules.".Length) : kv.Key, kv.Value));
-                executor.Configure(ruleConfigs); 
             }
         }
 
@@ -170,15 +145,12 @@ namespace Confluent.SchemaRegistry.Serdes
                 if (serializerImpl == null)
                 {
                     serializerImpl = typeof(T) == typeof(GenericRecord)
-                        ? (IAvroSerializerImpl<T>)new GenericSerializerImpl(schemaRegistryClient, autoRegisterSchema,
-                            normalizeSchemas, useLatestVersion, useLatestWithMetadata, initialBufferSize,
-                            subjectNameStrategy, ruleExecutors)
-                        : new SpecificSerializerImpl<T>(schemaRegistryClient, autoRegisterSchema, normalizeSchemas,
-                            useLatestVersion, useLatestWithMetadata, initialBufferSize, subjectNameStrategy, ruleExecutors);
+                        ? (IAsyncSerializer<T>)new GenericSerializerImpl(
+                            schemaRegistryClient, config, ruleExecutors)
+                        : new SpecificSerializerImpl<T>(schemaRegistryClient, config, ruleExecutors);
                 }
 
-                return await serializerImpl.Serialize(context.Topic, context.Headers, value,
-                        context.Component == MessageComponentType.Key)
+                return await serializerImpl.SerializeAsync(value, context)
                     .ConfigureAwait(continueOnCapturedContext: false);
             }
             catch (AggregateException e)

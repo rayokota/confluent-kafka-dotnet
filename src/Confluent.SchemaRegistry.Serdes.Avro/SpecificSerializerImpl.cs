@@ -20,10 +20,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Net;
 using System.Reflection;
-using System.Threading;
 using System.Threading.Tasks;
 using Avro.IO;
 using Avro.Specific;
@@ -32,7 +30,7 @@ using Confluent.Kafka;
 
 namespace Confluent.SchemaRegistry.Serdes
 {
-    internal class SpecificSerializerImpl<T> : IAvroSerializerImpl<T>
+    internal class SpecificSerializerImpl<T> : AsyncSerializer<T, Avro.Schema>
     {
         internal class SerializerSchemaData
         {
@@ -80,45 +78,34 @@ namespace Confluent.SchemaRegistry.Serdes
             }
         }
 
-        private ISchemaRegistryClient schemaRegistryClient;
-        private bool autoRegisterSchema;
-        private bool normalizeSchemas;
-        private bool useLatestVersion;
-        private IDictionary<string, string> useLatestWithMetadata;
-        private int initialBufferSize;
-        private SubjectNameStrategyDelegate subjectNameStrategy;
-        private IList<IRuleExecutor> ruleExecutors;
-
         private Dictionary<Type, SerializerSchemaData> multiSchemaData =
             new Dictionary<Type, SerializerSchemaData>();
 
-        private SerializerSchemaData singleSchemaData = null;
-
-        private SemaphoreSlim serializeMutex = new SemaphoreSlim(1);
+        private SerializerSchemaData singleSchemaData;
 
         public SpecificSerializerImpl(
             ISchemaRegistryClient schemaRegistryClient,
-            bool autoRegisterSchema,
-            bool normalizeSchemas,
-            bool useLatestVersion,
-            IDictionary<string, string> useLatestWithMetadata,
-            int initialBufferSize,
-            SubjectNameStrategyDelegate subjectNameStrategy,
-            IList<IRuleExecutor> ruleExecutors)
+            AvroSerializerConfig config,
+            IList<IRuleExecutor> ruleExecutors) : base(schemaRegistryClient, config, ruleExecutors)
         {
-            this.schemaRegistryClient = schemaRegistryClient;
-            this.autoRegisterSchema = autoRegisterSchema;
-            this.normalizeSchemas = normalizeSchemas;
-            this.useLatestVersion = useLatestVersion;
-            this.useLatestWithMetadata = useLatestWithMetadata;
-            this.initialBufferSize = initialBufferSize;
-            this.subjectNameStrategy = subjectNameStrategy;
-            this.ruleExecutors = ruleExecutors;
-
             Type writerType = typeof(T);
             if (writerType != typeof(ISpecificRecord))
             {
                 singleSchemaData = ExtractSchemaData(writerType);
+            }
+            
+            if (config == null) { return; }
+
+            if (config.BufferBytes != null) { this.initialBufferSize = config.BufferBytes.Value; }
+            if (config.AutoRegisterSchemas != null) { this.autoRegisterSchema = config.AutoRegisterSchemas.Value; }
+            if (config.NormalizeSchemas != null) { this.normalizeSchemas = config.NormalizeSchemas.Value; }
+            if (config.UseLatestVersion != null) { this.useLatestVersion = config.UseLatestVersion.Value; }
+            if (config.UseLatestWithMetadata != null) { this.useLatestWithMetadata = config.UseLatestWithMetadata; }
+            if (config.SubjectNameStrategy != null) { this.subjectNameStrategy = config.SubjectNameStrategy.Value.ToDelegate(); }
+
+            if (this.useLatestVersion && this.autoRegisterSchema)
+            {
+                throw new ArgumentException($"AvroSerializer: cannot enable both use.latest.version and auto.register.schemas");
             }
         }
         
@@ -178,6 +165,13 @@ namespace Confluent.SchemaRegistry.Serdes
             serializerSchemaData.AvroWriter = new SpecificWriter<T>(serializerSchemaData.WriterSchema);
             serializerSchemaData.WriterSchemaString = serializerSchemaData.WriterSchema.ToString();
             return serializerSchemaData;
+        }
+
+        public override async Task<byte[]> SerializeAsync(T value, SerializationContext context)
+        {
+            return await Serialize(context.Topic, context.Headers, value,
+                    context.Component == MessageComponentType.Key)
+                    .ConfigureAwait(continueOnCapturedContext: false);
         }
 
         public async Task<byte[]> Serialize(string topic, Headers headers, T data, bool isKey)
@@ -276,6 +270,11 @@ namespace Confluent.SchemaRegistry.Serdes
             {
                 throw e.InnerException;
             }
+        }
+        
+        protected override Task<Avro.Schema> ParseSchema(Schema schema)
+        {
+            return Task.FromResult(Avro.Schema.Parse(schema.SchemaString));
         }
     }
 }

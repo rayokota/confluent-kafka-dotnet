@@ -37,12 +37,11 @@ namespace Confluent.SchemaRegistry.Serdes
     /// </remarks>
     public class AvroDeserializer<T> : IAsyncDeserializer<T>
     {
-        private AvroDeserializerConfig config;
-        
-        private IAsyncDeserializer<T> deserializerImpl;
-
         private ISchemaRegistryClient schemaRegistryClient;
+        private AvroDeserializerConfig config;
         private IList<IRuleExecutor> ruleExecutors;
+
+        private IAsyncDeserializer<T> deserializerImpl;
 
         public AvroDeserializer(ISchemaRegistryClient schemaRegistryClient)
             : this(schemaRegistryClient, null)
