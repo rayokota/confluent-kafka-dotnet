@@ -32,10 +32,8 @@ using Newtonsoft.Json.Linq;
 
 namespace Confluent.SchemaRegistry.Serdes
 {
-    internal class SpecificDeserializerImpl<T> : IAvroDeserializerImpl<T>
+    internal class SpecificDeserializerImpl<T> : AsyncDeserializer<T, Avro.Schema>
     {
-        private readonly IDictionary<int, (Schema, Avro.Schema)> schemaCache = new Dictionary<int, (Schema, Avro.Schema)>();
-        
         /// <remarks>
         ///     A datum reader cache (one corresponding to each write schema that's been seen) 
         ///     is maintained so that they only need to be constructed once.
@@ -43,32 +41,16 @@ namespace Confluent.SchemaRegistry.Serdes
         private readonly Dictionary<(Avro.Schema, Avro.Schema), DatumReader<T>> datumReaderBySchema 
             = new Dictionary<(Avro.Schema, Avro.Schema), DatumReader<T>>();
 
-        private SemaphoreSlim deserializeMutex = new SemaphoreSlim(1);
-
         /// <summary>
         ///     The Avro schema used to read values of type <typeparamref name="T"/>
         /// </summary>
         public global::Avro.Schema ReaderSchema { get; private set; }
 
-        private ISchemaRegistryClient schemaRegistryClient;
-        private bool useLatestVersion;
-        private IDictionary<string, string> useLatestWithMetadata;
-        private SubjectNameStrategyDelegate subjectNameStrategy;
-        private IList<IRuleExecutor> ruleExecutors;
-
         public SpecificDeserializerImpl(
             ISchemaRegistryClient schemaRegistryClient,
-            bool useLatestVersion,
-            IDictionary<string, string> useLatestWithMetadata,
-            SubjectNameStrategyDelegate subjectNameStrategy,
-            IList<IRuleExecutor> ruleExecutors)
+            AvroDeserializerConfig config,
+            IList<IRuleExecutor> ruleExecutors) : base(schemaRegistryClient, config, ruleExecutors)
         {
-            this.schemaRegistryClient = schemaRegistryClient;
-            this.useLatestVersion = useLatestVersion;
-            this.useLatestWithMetadata = useLatestWithMetadata;
-            this.subjectNameStrategy = subjectNameStrategy;
-            this.ruleExecutors = ruleExecutors;
-
             if (typeof(ISpecificRecord).IsAssignableFrom(typeof(T)))
             {
                 ReaderSchema = (global::Avro.Schema)typeof(T).GetField("_SCHEMA", BindingFlags.Public | BindingFlags.Static).GetValue(null);
@@ -113,8 +95,23 @@ namespace Confluent.SchemaRegistry.Serdes
                     "long, byte[], instances of ISpecificRecord and subclasses of SpecificFixed."
                 );
             }
+            
+            if (config == null) { return; }
+
+            if (config.UseLatestVersion != null) { this.useLatestVersion = config.UseLatestVersion.Value; }
+            if (config.UseLatestWithMetadata != null) { this.useLatestWithMetadata = config.UseLatestWithMetadata; }
+            if (config.SubjectNameStrategy != null) { this.subjectNameStrategy = config.SubjectNameStrategy.Value.ToDelegate(); }
         }
 
+        public override async Task<T> DeserializeAsync(ReadOnlyMemory<byte> data, bool isNull,
+            SerializationContext context)
+        {
+            return isNull
+                ? default
+                : await Deserialize(context.Topic, context.Headers, data.ToArray(),
+                    context.Component == MessageComponentType.Key);
+        }
+        
         public async Task<T> Deserialize(string topic, Headers headers, byte[] array, bool isKey)
         {
             try
@@ -215,35 +212,9 @@ namespace Confluent.SchemaRegistry.Serdes
             }
         }
 
-        private async Task<(Schema, Avro.Schema)> GetSchema(int writerId)
+        protected override Task<Avro.Schema> ParseSchema(Schema schema)
         {
-            Schema writerSchemaJson;
-            Avro.Schema writerSchema;
-            await deserializeMutex.WaitAsync().ConfigureAwait(continueOnCapturedContext: false);
-            try
-            {
-                if (schemaCache.TryGetValue(writerId, out var tuple))
-                {
-                    (writerSchemaJson, writerSchema) = tuple;
-                }
-                else
-                {
-                    if (schemaCache.Count > schemaRegistryClient.MaxCachedSchemas)
-                    {
-                        schemaCache.Clear();
-                    }
-
-                    writerSchemaJson = await schemaRegistryClient.GetSchemaAsync(writerId).ConfigureAwait(continueOnCapturedContext: false);
-                    writerSchema = global::Avro.Schema.Parse(writerSchemaJson.SchemaString);
-                    schemaCache[writerId] = (writerSchemaJson, writerSchema);
-                }
-            }
-            finally
-            {
-                deserializeMutex.Release();
-            }
-
-            return (writerSchemaJson, writerSchema);
+            return Task.FromResult(Avro.Schema.Parse(schema.SchemaString));
         }
         
         private async Task<DatumReader<T>> GetDatumReader(Avro.Schema writerSchema, Avro.Schema readerSchema)

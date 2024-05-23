@@ -22,7 +22,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
-using System.Threading;
 using System.Threading.Tasks;
 using NJsonSchema;
 using NJsonSchema.Generation;
@@ -53,23 +52,9 @@ namespace Confluent.SchemaRegistry.Serdes
     ///     integration of System.Text.Json and JSON Schema, so this
     ///     is not yet supported by the serializer.
     /// </remarks>
-    public class JsonSerializer<T> : IAsyncSerializer<T> where T : class
+    public class JsonSerializer<T> : AsyncSerializer<T, JsonSchema> where T : class
     {
-        private const int DefaultInitialBufferSize = 1024;
-
-        private bool autoRegisterSchema = true;
-        private bool normalizeSchemas = false;
-        private bool useLatestVersion = false;
-        private IDictionary<string, string> useLatestWithMetadata = null;
-        private int initialBufferSize = DefaultInitialBufferSize;
-        private SubjectNameStrategyDelegate subjectNameStrategy = null;
-        private ISchemaRegistryClient schemaRegistryClient;
         private readonly JsonSchemaGeneratorSettings jsonSchemaGeneratorSettings;
-        private IList<IRuleExecutor> ruleExecutors;
-        
-        private HashSet<string> subjectsRegistered = new HashSet<string>();
-        private SemaphoreSlim serializeMutex = new SemaphoreSlim(1);
-        private readonly List<SchemaReference> EmptyReferencesList = new List<SchemaReference>();
 
         private JsonSchemaValidator validator = new JsonSchemaValidator();
 
@@ -95,15 +80,15 @@ namespace Confluent.SchemaRegistry.Serdes
         /// <param name="jsonSchemaGeneratorSettings">
         ///     JSON schema generator settings.
         /// </param>
-        public JsonSerializer(ISchemaRegistryClient schemaRegistryClient, JsonSerializerConfig config = null, JsonSchemaGeneratorSettings jsonSchemaGeneratorSettings = null, IList<IRuleExecutor> ruleExecutors = null)
+        public JsonSerializer(ISchemaRegistryClient schemaRegistryClient, JsonSerializerConfig config = null, 
+            JsonSchemaGeneratorSettings jsonSchemaGeneratorSettings = null, IList<IRuleExecutor> ruleExecutors = null)
+            : base(schemaRegistryClient, config, ruleExecutors)
         {
-            this.schemaRegistryClient = schemaRegistryClient;
             this.jsonSchemaGeneratorSettings = jsonSchemaGeneratorSettings;
-            this.ruleExecutors = ruleExecutors ?? new List<IRuleExecutor>();
 
             this.schema = this.jsonSchemaGeneratorSettings == null
-                ? NJsonSchema.JsonSchema.FromType<T>()
-                : NJsonSchema.JsonSchema.FromType<T>(this.jsonSchemaGeneratorSettings);
+                ? JsonSchema.FromType<T>()
+                : JsonSchema.FromType<T>(this.jsonSchemaGeneratorSettings);
             this.schemaFullname = schema.Title;
             this.schemaText = schema.ToJson();
 
@@ -127,14 +112,6 @@ namespace Confluent.SchemaRegistry.Serdes
             {
                 throw new ArgumentException($"JsonSerializer: cannot enable both use.latest.version and auto.register.schemas");
             }
-
-            foreach (IRuleExecutor executor in this.ruleExecutors.Concat(RuleRegistry.GetRuleExecutors()))
-            {
-                IEnumerable<KeyValuePair<string, string>> ruleConfigs = config
-                    .Select(kv => new KeyValuePair<string, string>(
-                        kv.Key.StartsWith("rules.") ? kv.Key.Substring("rules.".Length) : kv.Key, kv.Value));
-                executor.Configure(ruleConfigs); 
-            }
         }
 
         /// <summary>
@@ -157,7 +134,7 @@ namespace Confluent.SchemaRegistry.Serdes
         ///     A <see cref="System.Threading.Tasks.Task" /> that completes with 
         ///     <paramref name="value" /> serialized as a byte array.
         /// </returns>
-        public async Task<byte[]> SerializeAsync(T value, SerializationContext context)
+        public override async Task<byte[]> SerializeAsync(T value, SerializationContext context)
         {
             if (value == null) { return null; }
 
@@ -241,6 +218,11 @@ namespace Confluent.SchemaRegistry.Serdes
             {
                 throw e.InnerException;
             }
+        }
+
+        protected override async Task<JsonSchema> ParseSchema(Schema schema)
+        {
+            return await JsonSchema.FromJsonAsync(schema).ConfigureAwait(false);
         }
     }
 }

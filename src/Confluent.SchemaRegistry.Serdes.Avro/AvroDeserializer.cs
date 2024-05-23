@@ -37,11 +37,9 @@ namespace Confluent.SchemaRegistry.Serdes
     /// </remarks>
     public class AvroDeserializer<T> : IAsyncDeserializer<T>
     {
-        private bool useLatestVersion = false;
-        private IDictionary<string, string> useLatestWithMetadata = null;
-        private SubjectNameStrategyDelegate subjectNameStrategy = null;
+        private AvroDeserializerConfig config;
         
-        private IAvroDeserializerImpl<T> deserializerImpl;
+        private IAsyncDeserializer<T> deserializerImpl;
 
         private ISchemaRegistryClient schemaRegistryClient;
         private IList<IRuleExecutor> ruleExecutors;
@@ -70,6 +68,7 @@ namespace Confluent.SchemaRegistry.Serdes
         public AvroDeserializer(ISchemaRegistryClient schemaRegistryClient, AvroDeserializerConfig config = null, IList<IRuleExecutor> ruleExecutors = null)
         {
             this.schemaRegistryClient = schemaRegistryClient;
+            this.config = config;
             this.ruleExecutors = ruleExecutors ?? new List<IRuleExecutor>();
             
             if (config == null) { return; }
@@ -91,18 +90,6 @@ namespace Confluent.SchemaRegistry.Serdes
                 {
                     throw new ArgumentException($"AvroDeserializer: unknown configuration parameter {property.Key}");
                 }
-            }
-
-            if (config.UseLatestVersion != null) { this.useLatestVersion = config.UseLatestVersion.Value; }
-            if (config.UseLatestWithMetadata != null) { this.useLatestWithMetadata = config.UseLatestWithMetadata; }
-            if (config.SubjectNameStrategy != null) { this.subjectNameStrategy = config.SubjectNameStrategy.Value.ToDelegate(); }
-            
-            foreach (IRuleExecutor executor in this.ruleExecutors.Concat(RuleRegistry.GetRuleExecutors()))
-            {
-                IEnumerable<KeyValuePair<string, string>> ruleConfigs = config
-                    .Select(kv => new KeyValuePair<string, string>(
-                        kv.Key.StartsWith("rules.") ? kv.Key.Substring("rules.".Length) : kv.Key, kv.Value));
-                executor.Configure(ruleConfigs); 
             }
         }
 
@@ -143,12 +130,11 @@ namespace Confluent.SchemaRegistry.Serdes
                 if (deserializerImpl == null)
                 {
                     deserializerImpl = (typeof(T) == typeof(GenericRecord))
-                        ? (IAvroDeserializerImpl<T>)new GenericDeserializerImpl(schemaRegistryClient, useLatestVersion, useLatestWithMetadata, subjectNameStrategy, ruleExecutors)
-                        : new SpecificDeserializerImpl<T>(schemaRegistryClient, useLatestVersion, useLatestWithMetadata, subjectNameStrategy, ruleExecutors);
+                        ? (IAsyncDeserializer<T>)new GenericDeserializerImpl(schemaRegistryClient, config, ruleExecutors)
+                        : new SpecificDeserializerImpl<T>(schemaRegistryClient, config, ruleExecutors);
                 }
 
-                // TODO: change this interface such that it takes ReadOnlyMemory<byte>, not byte[].
-                return isNull ? default : await deserializerImpl.Deserialize(context.Topic, context.Headers, data.ToArray(), context.Component == MessageComponentType.Key)
+                return isNull ? default : await deserializerImpl.DeserializeAsync(data, isNull, context)
                     .ConfigureAwait(continueOnCapturedContext: false);
             }
             catch (AggregateException e)

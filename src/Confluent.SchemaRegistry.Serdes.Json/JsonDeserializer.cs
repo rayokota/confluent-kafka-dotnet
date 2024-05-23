@@ -20,7 +20,6 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 using Confluent.Kafka;
 using Newtonsoft.Json.Linq;
@@ -50,21 +49,8 @@ namespace Confluent.SchemaRegistry.Serdes
     ///     integration of System.Text.Json and JSON Schema, so this
     ///     is not yet supported by the deserializer.
     /// </remarks>
-    public class JsonDeserializer<T> : IAsyncDeserializer<T> where T : class
+    public class JsonDeserializer<T> : AsyncDeserializer<T, JsonSchema> where T : class
     {
-        private bool useLatestVersion = false;
-        private IDictionary<string, string> useLatestWithMetadata = null;
-        private SubjectNameStrategyDelegate subjectNameStrategy = null;
-        
-        private readonly int headerSize =  sizeof(int) + sizeof(byte);
-        
-        private readonly IDictionary<int, (Schema, JsonSchema)> schemaCache = new Dictionary<int, (Schema, JsonSchema)>();
-        
-        private SemaphoreSlim deserializeMutex = new SemaphoreSlim(1);
-
-        private ISchemaRegistryClient schemaRegistryClient;
-        private IList<IRuleExecutor> ruleExecutors;
-        
         private readonly JsonSchemaGeneratorSettings jsonSchemaGeneratorSettings;
 
         /// <summary>
@@ -87,11 +73,11 @@ namespace Confluent.SchemaRegistry.Serdes
         {
         }
 
-        public JsonDeserializer(ISchemaRegistryClient schemaRegistryClient, JsonDeserializerConfig config, JsonSchemaGeneratorSettings jsonSchemaGeneratorSettings = null, IList<IRuleExecutor> ruleExecutors = null)
+        public JsonDeserializer(ISchemaRegistryClient schemaRegistryClient, JsonDeserializerConfig config, 
+            JsonSchemaGeneratorSettings jsonSchemaGeneratorSettings = null, IList<IRuleExecutor> ruleExecutors = null) 
+            : base(schemaRegistryClient, config, ruleExecutors)
         {
-            this.schemaRegistryClient = schemaRegistryClient;
             this.jsonSchemaGeneratorSettings = jsonSchemaGeneratorSettings;
-            this.ruleExecutors = ruleExecutors ?? new List<IRuleExecutor>();
 
             if (config == null) { return; }
 
@@ -105,14 +91,6 @@ namespace Confluent.SchemaRegistry.Serdes
             if (config.UseLatestVersion != null) { this.useLatestVersion = config.UseLatestVersion.Value; }
             if (config.UseLatestWithMetadata != null) { this.useLatestWithMetadata = config.UseLatestWithMetadata; }
             if (config.SubjectNameStrategy != null) { this.subjectNameStrategy = config.SubjectNameStrategy.Value.ToDelegate(); }
-            
-            foreach (IRuleExecutor executor in this.ruleExecutors.Concat(RuleRegistry.GetRuleExecutors()))
-            {
-                IEnumerable<KeyValuePair<string, string>> ruleConfigs = config
-                    .Select(kv => new KeyValuePair<string, string>(
-                        kv.Key.StartsWith("rules.") ? kv.Key.Substring("rules.".Length) : kv.Key, kv.Value));
-                executor.Configure(ruleConfigs); 
-            }
         }
 
         /// <summary>
@@ -132,7 +110,7 @@ namespace Confluent.SchemaRegistry.Serdes
         ///     A <see cref="System.Threading.Tasks.Task" /> that completes
         ///     with the deserialized value.
         /// </returns>
-        public async Task<T> DeserializeAsync(ReadOnlyMemory<byte> data, bool isNull, SerializationContext context)
+        public override async Task<T> DeserializeAsync(ReadOnlyMemory<byte> data, bool isNull, SerializationContext context)
         {
             if (isNull) { return null; }
 
@@ -236,35 +214,9 @@ namespace Confluent.SchemaRegistry.Serdes
             }
         }
 
-        private async Task<(Schema, JsonSchema)> GetSchema(int writerId)
+        protected override async Task<JsonSchema> ParseSchema(Schema schema)
         {
-            Schema writerSchema;
-            JsonSchema writerSchemaJson;
-            await deserializeMutex.WaitAsync().ConfigureAwait(continueOnCapturedContext: false);
-            try
-            {
-                if (schemaCache.TryGetValue(writerId, out var tuple))
-                {
-                    (writerSchema, writerSchemaJson) = tuple;
-                }
-                else
-                {
-                    if (schemaCache.Count > schemaRegistryClient.MaxCachedSchemas)
-                    {
-                        schemaCache.Clear();
-                    }
-
-                    writerSchema = await schemaRegistryClient.GetSchemaAsync(writerId).ConfigureAwait(continueOnCapturedContext: false);
-                    writerSchemaJson = await JsonSchema.FromJsonAsync(writerSchema).ConfigureAwait(false);
-                    schemaCache[writerId] = (writerSchema, writerSchemaJson);
-                }
-            }
-            finally
-            {
-                deserializeMutex.Release();
-            }
-
-            return (writerSchema, writerSchemaJson);
+            return await JsonSchema.FromJsonAsync(schema).ConfigureAwait(false);
         }
     }
 }

@@ -21,7 +21,6 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Net;
-using System.Threading;
 using Confluent.Kafka;
 using Google.Protobuf;
 using ProtobufNet::Google.Protobuf.Reflection;
@@ -48,20 +47,9 @@ namespace Confluent.SchemaRegistry.Serdes
     ///                            a single 0 byte as an optimization.
     ///                         2. The protobuf serialized data.
     /// </remarks>
-    public class ProtobufDeserializer<T> : IAsyncDeserializer<T> where T : class, IMessage<T>, new()
+    public class ProtobufDeserializer<T> : AsyncDeserializer<T, FileDescriptorSet> where T : class, IMessage<T>, new()
     {
-        private bool useLatestVersion = false;
-        private IDictionary<string, string> useLatestWithMetadata = null;
-        private SubjectNameStrategyDelegate subjectNameStrategy = null;
-        
-        private readonly Dictionary<int, (Schema, FileDescriptorSet)> schemaCache = new Dictionary<int, (Schema, FileDescriptorSet)>();
-        
-        private SemaphoreSlim deserializeMutex = new SemaphoreSlim(1);
-
-        private ISchemaRegistryClient schemaRegistryClient;
-        private IList<IRuleExecutor> ruleExecutors;
-        
-        private bool useDeprecatedFormat = false;
+        private bool useDeprecatedFormat;
         
         private MessageParser<T> parser;
 
@@ -81,11 +69,9 @@ namespace Confluent.SchemaRegistry.Serdes
         {
         }
 
-        public ProtobufDeserializer(ISchemaRegistryClient schemaRegistryClient, ProtobufDeserializerConfig config, IList<IRuleExecutor> ruleExecutors = null)
+        public ProtobufDeserializer(ISchemaRegistryClient schemaRegistryClient, ProtobufDeserializerConfig config, 
+            IList<IRuleExecutor> ruleExecutors = null) : base(schemaRegistryClient, config, ruleExecutors)
         {
-            this.schemaRegistryClient = schemaRegistryClient;
-            this.ruleExecutors = ruleExecutors ?? new List<IRuleExecutor>();
-
             this.parser = new MessageParser<T>(() => new T());
 
             if (config == null) { return; }
@@ -106,14 +92,6 @@ namespace Confluent.SchemaRegistry.Serdes
             if (config.UseLatestVersion != null) { this.useLatestVersion = config.UseLatestVersion.Value; }
             if (config.UseLatestWithMetadata != null) { this.useLatestWithMetadata = config.UseLatestWithMetadata; }
             if (config.SubjectNameStrategy != null) { this.subjectNameStrategy = config.SubjectNameStrategy.Value.ToDelegate(); }
-            
-            foreach (IRuleExecutor executor in this.ruleExecutors.Concat(RuleRegistry.GetRuleExecutors()))
-            {
-                IEnumerable<KeyValuePair<string, string>> ruleConfigs = config
-                    .Select(kv => new KeyValuePair<string, string>(
-                        kv.Key.StartsWith("rules.") ? kv.Key.Substring("rules.".Length) : kv.Key, kv.Value));
-                executor.Configure(ruleConfigs); 
-            }
         }
 
         /// <summary>
@@ -133,7 +111,7 @@ namespace Confluent.SchemaRegistry.Serdes
         ///     A <see cref="System.Threading.Tasks.Task" /> that completes
         ///     with the deserialized value.
         /// </returns>
-        public async Task<T> DeserializeAsync(ReadOnlyMemory<byte> data, bool isNull, SerializationContext context)
+        public override async Task<T> DeserializeAsync(ReadOnlyMemory<byte> data, bool isNull, SerializationContext context)
         {
             if (isNull) { return null; }
 
@@ -228,37 +206,11 @@ namespace Confluent.SchemaRegistry.Serdes
             }
         }
 
-        private async Task<(Schema, FileDescriptorSet)> GetSchema(int writerId)
+        protected override async Task<FileDescriptorSet> ParseSchema(Schema schema)
         {
-            Schema writerSchema;
-            FileDescriptorSet fdSet;
-            await deserializeMutex.WaitAsync().ConfigureAwait(continueOnCapturedContext: false);
-            try
-            {
-                if (schemaCache.TryGetValue(writerId, out var tuple))
-                {
-                    (writerSchema, fdSet) = tuple;
-                }
-                else
-                {
-                    if (schemaCache.Count > schemaRegistryClient.MaxCachedSchemas)
-                    {
-                        schemaCache.Clear();
-                    }
-
-                    writerSchema = await schemaRegistryClient.GetSchemaAsync(writerId).ConfigureAwait(continueOnCapturedContext: false);
-                    IDictionary<string, string> references = await SerdeUtils.ResolveReferences(schemaRegistryClient, writerSchema)
-                        .ConfigureAwait(continueOnCapturedContext: false);
-                    fdSet = ProtobufUtils.Parse(writerSchema.SchemaString, references);
-                    schemaCache[writerId] = (writerSchema, fdSet);
-                }
-            }
-            finally
-            {
-                deserializeMutex.Release();
-            }
-
-            return (writerSchema, fdSet);
+            IDictionary<string, string> references = await SerdeUtils.ResolveReferences(schemaRegistryClient, schema)
+                .ConfigureAwait(continueOnCapturedContext: false);
+            return ProtobufUtils.Parse(schema.SchemaString, references);
         }
     }
 }
