@@ -14,8 +14,8 @@
 //
 // Refer to LICENSE for more information.
 
+using System;
 using System.Collections.Generic;
-using System.Net;
 using System.Net.Http;
 using System.Threading.Tasks;
 using System.Security.Cryptography.X509Certificates;
@@ -44,7 +44,7 @@ namespace Confluent.SchemaRegistry.Encryption
 
         public async Task<RegisteredKek> GetKekAsync(string name, bool ignoreDeletedKeks)
             => await RequestAsync<RegisteredKek>(
-                    $"dek-registry/v1/keks/{WebUtility.UrlEncode(name)}?deleted={!ignoreDeletedKeks}",
+                    $"dek-registry/v1/keks/{Uri.EscapeDataString(name)}?deleted={!ignoreDeletedKeks}",
                     HttpMethod.Get)
                 .ConfigureAwait(continueOnCapturedContext: false);
 
@@ -55,7 +55,7 @@ namespace Confluent.SchemaRegistry.Encryption
 
 
         public async Task<RegisteredKek> UpdateKekAsync(string name, UpdateKek kek)
-            => await RequestAsync<RegisteredKek>($"dek-registry/v1/keks/{WebUtility.UrlEncode(name)}",
+            => await RequestAsync<RegisteredKek>($"dek-registry/v1/keks/{Uri.EscapeDataString(name)}",
                     HttpMethod.Put, kek)
                 .ConfigureAwait(continueOnCapturedContext: false);
 
@@ -65,33 +65,33 @@ namespace Confluent.SchemaRegistry.Encryption
 
         public async Task<List<string>> GetDeksAsync(string kekName, bool ignoreDeletedDeks)
             => await RequestListOfAsync<string>(
-                    $"dek-registry/v1/keks/{WebUtility.UrlEncode(kekName)}/deks?deleted={!ignoreDeletedDeks}",
+                    $"dek-registry/v1/keks/{Uri.EscapeDataString(kekName)}/deks?deleted={!ignoreDeletedDeks}",
                     HttpMethod.Get)
                 .ConfigureAwait(continueOnCapturedContext: false);
 
         public async Task<List<int>> GetDekVersionsAsync(string kekName, string subject, DekFormat? algorithm,
             bool ignoreDeletedDeks)
             => await RequestListOfAsync<int>(
-                    $"dek-registry/v1/keks/{WebUtility.UrlEncode(kekName)}/deks/{WebUtility.UrlEncode(subject)}/versions?deleted={!ignoreDeletedDeks}{(algorithm != null ? "&algorithm=" + algorithm : "")}",
+                    $"dek-registry/v1/keks/{Uri.EscapeDataString(kekName)}/deks/{Uri.EscapeDataString(subject)}/versions?deleted={!ignoreDeletedDeks}{(algorithm != null ? "&algorithm=" + algorithm : "")}",
                     HttpMethod.Get)
                 .ConfigureAwait(continueOnCapturedContext: false);
 
         public async Task<RegisteredDek> GetDekAsync(string kekName, string subject, DekFormat? algorithm,
             bool ignoreDeletedDeks)
             => await RequestAsync<RegisteredDek>(
-                    $"dek-registry/v1/keks/{WebUtility.UrlEncode(kekName)}/deks/{WebUtility.UrlEncode(subject)}?deleted={!ignoreDeletedDeks}{(algorithm != null ? "&algorithm=" + algorithm : "")}",
+                    $"dek-registry/v1/keks/{Uri.EscapeDataString(kekName)}/deks/{Uri.EscapeDataString(subject)}?deleted={!ignoreDeletedDeks}{(algorithm != null ? "&algorithm=" + algorithm : "")}",
                     HttpMethod.Get)
                 .ConfigureAwait(continueOnCapturedContext: false);
 
         public async Task<RegisteredDek> GetDekVersionAsync(string kekName, string subject, int version, DekFormat? algorithm,
             bool ignoreDeletedDeks)
             => await RequestAsync<RegisteredDek>(
-                    $"dek-registry/v1/keks/{WebUtility.UrlEncode(kekName)}/deks/{WebUtility.UrlEncode(subject)}/versions/{version}?deleted={!ignoreDeletedDeks}{(algorithm != null ? "&algorithm=" + algorithm : "")}",
+                    $"dek-registry/v1/keks/{Uri.EscapeDataString(kekName)}/deks/{Uri.EscapeDataString(subject)}/versions/{version}?deleted={!ignoreDeletedDeks}{(algorithm != null ? "&algorithm=" + algorithm : "")}",
                     HttpMethod.Get)
                 .ConfigureAwait(continueOnCapturedContext: false);
 
         public async Task<RegisteredDek> CreateDekAsync(string kekName, Dek dek)
-            => await RequestAsync<RegisteredDek>($"dek-registry/v1/keks/{WebUtility.UrlEncode(kekName)}",
+            => await RequestAsync<RegisteredDek>($"dek-registry/v1/keks/{Uri.EscapeDataString(kekName)}",
                     HttpMethod.Post, dek)
                 .ConfigureAwait(continueOnCapturedContext: false);
 

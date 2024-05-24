@@ -21,7 +21,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
-using System.Text;
 using System.Threading.Tasks;
 using System.Security.Cryptography.X509Certificates;
 
@@ -331,24 +330,24 @@ namespace Confluent.SchemaRegistry
                 .ConfigureAwait(continueOnCapturedContext: false);
 
         public async Task<List<int>> GetSubjectVersionsAsync(string subject)
-            => await RequestListOfAsync<int>($"subjects/{WebUtility.UrlEncode(subject)}/versions", HttpMethod.Get)
+            => await RequestListOfAsync<int>($"subjects/{Uri.EscapeDataString(subject)}/versions", HttpMethod.Get)
                 .ConfigureAwait(continueOnCapturedContext: false);
 
         public async Task<RegisteredSchema> GetSchemaAsync(string subject, int version)
             => SanitizeRegisteredSchema(
-                await RequestAsync<RegisteredSchema>($"subjects/{WebUtility.UrlEncode(subject)}/versions/{version}",
+                await RequestAsync<RegisteredSchema>($"subjects/{Uri.EscapeDataString(subject)}/versions/{version}",
                         HttpMethod.Get)
                     .ConfigureAwait(continueOnCapturedContext: false));
 
         public async Task<RegisteredSchema> GetLatestSchemaAsync(string subject)
             => SanitizeRegisteredSchema(
-                await RequestAsync<RegisteredSchema>($"subjects/{WebUtility.UrlEncode(subject)}/versions/latest",
+                await RequestAsync<RegisteredSchema>($"subjects/{Uri.EscapeDataString(subject)}/versions/latest",
                         HttpMethod.Get)
                     .ConfigureAwait(continueOnCapturedContext: false));
 
         public async Task<RegisteredSchema> GetLatestWithMetadataAsync(string subject, IDictionary<string, string> metadata, bool ignoreDeletedSchemas)
             => SanitizeRegisteredSchema(
-                await RequestAsync<RegisteredSchema>($"subjects/{WebUtility.UrlEncode(subject)}/metadata?{getKeyValuePairs(metadata)}&deleted={!ignoreDeletedSchemas}",
+                await RequestAsync<RegisteredSchema>($"subjects/{Uri.EscapeDataString(subject)}/metadata?{getKeyValuePairs(metadata)}&deleted={!ignoreDeletedSchemas}",
                         HttpMethod.Get)
                     .ConfigureAwait(continueOnCapturedContext: false));
         
@@ -359,7 +358,7 @@ namespace Confluent.SchemaRegistry
         
         public async Task<int> RegisterSchemaAsync(string subject, Schema schema, bool normalize)
             => (await RequestAsync<SchemaId>(
-                    $"subjects/{WebUtility.UrlEncode(subject)}/versions?normalize={normalize}", HttpMethod.Post,
+                    $"subjects/{Uri.EscapeDataString(subject)}/versions?normalize={normalize}", HttpMethod.Post,
                     schema)
                 .ConfigureAwait(continueOnCapturedContext: false)).Id;
 
@@ -367,7 +366,7 @@ namespace Confluent.SchemaRegistry
         public async Task<RegisteredSchema> LookupSchemaAsync(string subject, Schema schema, bool ignoreDeletedSchemas,
             bool normalize)
             => await RequestAsync<RegisteredSchema>(
-                    $"subjects/{WebUtility.UrlEncode(subject)}?normalize={normalize}&deleted={!ignoreDeletedSchemas}",
+                    $"subjects/{Uri.EscapeDataString(subject)}?normalize={normalize}&deleted={!ignoreDeletedSchemas}",
                     HttpMethod.Post, schema)
                 .ConfigureAwait(continueOnCapturedContext: false);
 
@@ -377,14 +376,14 @@ namespace Confluent.SchemaRegistry
 
         public async Task<bool> TestCompatibilityAsync(string subject, int versionId, Schema schema)
             => (await RequestAsync<CompatibilityCheck>(
-                    $"compatibility/subjects/{WebUtility.UrlEncode(subject)}/versions/{versionId}", HttpMethod.Post,
+                    $"compatibility/subjects/{Uri.EscapeDataString(subject)}/versions/{versionId}", HttpMethod.Post,
                     schema)
                 .ConfigureAwait(continueOnCapturedContext: false)).IsCompatible;
 
 
         public async Task<bool> TestLatestCompatibilityAsync(string subject, Schema schema)
             => (await RequestAsync<CompatibilityCheck>(
-                    $"compatibility/subjects/{WebUtility.UrlEncode(subject)}/versions/latest", HttpMethod.Post,
+                    $"compatibility/subjects/{Uri.EscapeDataString(subject)}/versions/latest", HttpMethod.Post,
                     schema)
                 .ConfigureAwait(continueOnCapturedContext: false)).IsCompatible;
 
@@ -397,7 +396,7 @@ namespace Confluent.SchemaRegistry
                 .ConfigureAwait(continueOnCapturedContext: false)).CompatibilityLevel;
 
         public async Task<Compatibility> GetCompatibilityAsync(string subject)
-            => (await RequestAsync<ServerConfig>($"config/{WebUtility.UrlEncode(subject)}", HttpMethod.Get)
+            => (await RequestAsync<ServerConfig>($"config/{Uri.EscapeDataString(subject)}", HttpMethod.Get)
                 .ConfigureAwait(continueOnCapturedContext: false)).CompatibilityLevel;
 
         public async Task<ServerConfig> SetGlobalCompatibilityAsync(Compatibility compatibility)
@@ -405,7 +404,7 @@ namespace Confluent.SchemaRegistry
                 .ConfigureAwait(continueOnCapturedContext: false);
 
         public async Task<ServerConfig> SetCompatibilityAsync(string subject, Compatibility compatibility)
-            => await RequestAsync<ServerConfig>($"config/{WebUtility.UrlEncode(subject)}", HttpMethod.Put,
+            => await RequestAsync<ServerConfig>($"config/{Uri.EscapeDataString(subject)}", HttpMethod.Put,
                     new ServerConfig(compatibility))
                 .ConfigureAwait(continueOnCapturedContext: false);
 
