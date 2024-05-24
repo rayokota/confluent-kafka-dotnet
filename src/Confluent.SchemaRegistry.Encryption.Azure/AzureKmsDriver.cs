@@ -1,5 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
+using Azure.Core;
+using Azure.Identity;
 
 namespace Confluent.SchemaRegistry.Encryption.Azure
 {
@@ -22,15 +23,18 @@ namespace Confluent.SchemaRegistry.Encryption.Azure
 
         public IKmsClient NewKmsClient(IDictionary<string, string> config, string keyUrl)
         {
-            // TODO env vars
+            TokenCredential credential;
             if (config.TryGetValue(TenantId, out string tenantId) 
                 && config.TryGetValue(ClientId, out string clientId)
                 && config.TryGetValue(ClientSecret, out string clientSecret))
             {
-                return new AzureKmsClient(keyUrl, tenantId, clientId, clientSecret);
+                credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
             }
-
-            throw new ArgumentException("Cannot load credentials");
+            else
+            {
+                credential = new DefaultAzureCredential();
+            }
+            return new AzureKmsClient(keyUrl, credential);
         }
     }
 }

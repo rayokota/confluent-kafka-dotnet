@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Threading.Tasks;
-using Azure.Identity;
+using Azure.Core;
 using Azure.Security.KeyVault.Keys.Cryptography;
 
 namespace Confluent.SchemaRegistry.Encryption.Azure
@@ -8,26 +8,19 @@ namespace Confluent.SchemaRegistry.Encryption.Azure
     public class AzureKmsClient : IKmsClient
     {
         private CryptographyClient kmsClient;
-        private ClientSecretCredential credential;
+        private TokenCredential credentials;
         private string keyId;
         
         public string KekId { get; }
-        public string TenantId { get; }
-        public string ClientId { get; }
-        public string ClientSecret { get; }
         
-        public AzureKmsClient(string kekId, string tenantId, string clientId, string clientSecret)
+        public AzureKmsClient(string kekId, TokenCredential tokenCredential)
         {
             KekId = kekId;
-            TenantId = tenantId;
-            ClientId = clientId;
-            ClientSecret = clientSecret;
-            
             if (!kekId.StartsWith(AzureKmsDriver.Prefix)) {
               throw new ArgumentException(string.Format($"key URI must start with {AzureKmsDriver.Prefix}"));
             }
             keyId = KekId.Substring(AzureKmsDriver.Prefix.Length);
-            credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
+            credentials = tokenCredential;
         }
         
         public bool DoesSupport(string uri)
@@ -53,7 +46,7 @@ namespace Confluent.SchemaRegistry.Encryption.Azure
         {
             if (kmsClient == null)
             {
-                kmsClient = new CryptographyClient(new Uri(keyId), credential);
+                kmsClient = new CryptographyClient(new Uri(keyId), credentials);
             }
             return kmsClient;
         }

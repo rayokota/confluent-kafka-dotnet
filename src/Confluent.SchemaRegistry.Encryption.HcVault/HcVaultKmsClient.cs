@@ -16,11 +16,18 @@ namespace Confluent.SchemaRegistry.Encryption.HcVault
         private string keyName;
         
         public string KekId { get; }
+        public string Namespace { get; }
         public string TokenId { get; }
         
-        public HcVaultKmsClient(string kekId, string tokenId)
+        public HcVaultKmsClient(string kekId, string ns, string tokenId)
         {
+            if (tokenId == null)
+            {
+                tokenId = Environment.GetEnvironmentVariable("VAULT_TOKEN");
+                ns = Environment.GetEnvironmentVariable("VAULT_NAMESPACE");
+            }
             KekId = kekId;
+            Namespace = ns;
             TokenId = tokenId;
             
             if (!kekId.StartsWith(HcVaultKmsDriver.Prefix)) {
@@ -32,6 +39,10 @@ namespace Confluent.SchemaRegistry.Encryption.HcVault
             keyName = uri.Segments[^1];
             
             var vaultClientSettings = new VaultClientSettings(uri.Scheme + "://" + uri.Authority, authMethod);
+            if (ns != null)
+            {
+                vaultClientSettings.Namespace = ns;
+            }
             kmsClient = new VaultClient(vaultClientSettings);
         }
         

@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Amazon;
 using Amazon.KeyManagementService;
 using Amazon.KeyManagementService.Model;
+using Amazon.Runtime;
 
 namespace Confluent.SchemaRegistry.Encryption.Aws
 {
@@ -13,14 +14,10 @@ namespace Confluent.SchemaRegistry.Encryption.Aws
         private string keyId;
         
         public string KekId { get; }
-        public string AccessKeyId { get; }
-        public string SecretAccessKey { get; }
         
-        public AwsKmsClient(string kekId, string accessKeyId, string secretAccessKey)
+        public AwsKmsClient(string kekId, AWSCredentials credentials)
         {
             KekId = kekId;
-            AccessKeyId = accessKeyId;
-            SecretAccessKey = secretAccessKey;
             
             if (!kekId.StartsWith(AwsKmsDriver.Prefix)) {
               throw new ArgumentException(string.Format($"key URI must start with {AwsKmsDriver.Prefix}"));
@@ -31,8 +28,10 @@ namespace Confluent.SchemaRegistry.Encryption.Aws
                 throw new ArgumentException("invalid key URI");
             }
             string regionName = tokens[3];
-            kmsClient = new AmazonKeyManagementServiceClient(accessKeyId, secretAccessKey, 
-                RegionEndpoint.GetBySystemName(regionName));
+            RegionEndpoint regionEndpoint = RegionEndpoint.GetBySystemName(regionName);
+            kmsClient = credentials != null
+                ? new AmazonKeyManagementServiceClient(credentials, regionEndpoint)
+                : new AmazonKeyManagementServiceClient(regionEndpoint);
         }
 
         public bool DoesSupport(string uri)

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using Google.Apis.Auth.OAuth2;
 
 namespace Confluent.SchemaRegistry.Encryption.Gcp
 {
@@ -24,18 +25,25 @@ namespace Confluent.SchemaRegistry.Encryption.Gcp
 
         public IKmsClient NewKmsClient(IDictionary<string, string> config, string keyUrl)
         {
-            // TODO env vars
-            // TODO use params
-            if (config.TryGetValue(AccountType, out string accountType) 
-                && config.TryGetValue(ClientId, out string clientId)
+            GoogleCredential credentials = null;
+            if (config.TryGetValue(ClientId, out string clientId)
                 && config.TryGetValue(ClientEmail, out string clientEmail)
                 && config.TryGetValue(PrivateKeyId, out string privateKeyId)
                 && config.TryGetValue(PrivateKey, out string privateKey))
             {
-                return new GcpKmsClient(keyUrl);
-            }
+                if (!config.TryGetValue(AccountType, out string accountType))
+                {
+                    accountType = "service_account";
+                }
 
-            throw new ArgumentException("Cannot load credentials");
+                String json = "{ \"type\": \"" + accountType
+                    + "\", \"client_id\": \"" + clientId
+                    + "\", \"client_email\": \"" + clientEmail
+                    + "\", \"private_key_id\": \"" + privateKeyId
+                    + "\", \"private_key\": \"" + privateKey + "\" }";
+                credentials = GoogleCredential.FromJson(json);
+            }
+            return new GcpKmsClient(keyUrl, credentials);
         }
     }
 }

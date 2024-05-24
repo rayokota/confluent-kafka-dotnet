@@ -1,5 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
+using Amazon.Runtime;
 
 namespace Confluent.SchemaRegistry.Encryption.Aws
 {
@@ -21,14 +21,13 @@ namespace Confluent.SchemaRegistry.Encryption.Aws
 
         public IKmsClient NewKmsClient(IDictionary<string, string> config, string keyUrl)
         {
-            // TODO env vars
+            AWSCredentials credentials = null;
             if (config.TryGetValue(AccessKeyId, out string accessKeyId) 
                 && config.TryGetValue(SecretAccessKey, out string secretAccessKey))
             {
-                return new AwsKmsClient(keyUrl, accessKeyId, secretAccessKey);
+                credentials = new BasicAWSCredentials(accessKeyId, secretAccessKey);
             }
-            
-            throw new ArgumentException("Cannot load credentials");
+            return new AwsKmsClient(keyUrl, credentials);
         }
     }
 }

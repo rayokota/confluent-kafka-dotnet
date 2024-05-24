@@ -21,14 +21,9 @@ namespace Confluent.SchemaRegistry.Encryption.HcVault
 
         public IKmsClient NewKmsClient(IDictionary<string, string> config, string keyUrl)
         {
-            // TODO env vars
-            // TODO namespace
-            if (config.TryGetValue(TokenId, out string tokenId)) 
-            {
-                return new HcVaultKmsClient(keyUrl, tokenId);
-            }
-
-            throw new ArgumentException("Cannot load credentials");
+            config.TryGetValue(TokenId, out string tokenId);
+            config.TryGetValue(Namespace, out string ns);
+            return new HcVaultKmsClient(keyUrl, ns, tokenId);
         }
     }
 }

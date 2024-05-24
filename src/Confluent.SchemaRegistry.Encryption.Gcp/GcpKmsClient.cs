@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Threading.Tasks;
+using Google.Apis.Auth.OAuth2;
 using Google.Cloud.Kms.V1;
 using Google.Protobuf;
 
@@ -12,17 +13,25 @@ namespace Confluent.SchemaRegistry.Encryption.Gcp
         private CryptoKeyName keyName;
         
         public string KekId { get; }
-        
-        public GcpKmsClient(string kekId)
+
+        public GcpKmsClient(string kekId, GoogleCredential credential)
         {
             KekId = kekId;
-            
-            if (!kekId.StartsWith(GcpKmsDriver.Prefix)) {
-              throw new ArgumentException(string.Format($"key URI must start with {GcpKmsDriver.Prefix}"));
+
+            if (!kekId.StartsWith(GcpKmsDriver.Prefix))
+            {
+                throw new ArgumentException(string.Format($"key URI must start with {GcpKmsDriver.Prefix}"));
             }
+
             keyId = KekId.Substring(GcpKmsDriver.Prefix.Length);
             keyName = CryptoKeyName.Parse(keyId);
-            kmsClient = KeyManagementServiceClient.Create();
+            kmsClient = credential != null
+                ? new KeyManagementServiceClientBuilder()
+                    {
+                        GoogleCredential = credential
+                    }
+                    .Build()
+                : KeyManagementServiceClient.Create();
         }
 
         public bool DoesSupport(string uri)
